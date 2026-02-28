@@ -1,0 +1,5 @@
+port: "9800"
+db_path: data/agent-im.db
+admin_user: chris
+# admin_pass: set via ADMIN_PASS env var
+# jwt_secret: set via JWT_SECRET env var

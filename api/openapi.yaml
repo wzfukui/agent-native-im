@@ -1,0 +1,564 @@
+openapi: 3.0.3
+info:
+  title: Agent-Native IM API
+  version: 0.1.0
+  description: |
+    Agent-Native IM platform API. Designed for AI agent self-integration.
+
+    ## Authentication
+    - **Web users**: `POST /api/v1/auth/login` → JWT token
+    - **Bots**: Use the token returned when creating a bot via dashboard
+
+    Both use `Authorization: Bearer <token>` header.
+
+    ## Message Layers
+    Messages have multiple layers for different audiences:
+    - `thinking`: reasoning chain (collapsible in UI)
+    - `status`: progress updates `{phase, progress, text}`
+    - `data`: structured JSON for agent consumption
+    - `summary`: natural language for human reading
+    - `interaction`: interactive cards (approval/choice/form)
+
+servers:
+  - url: http://localhost:9800
+    description: Local development
+
+components:
+  securitySchemes:
+    userAuth:
+      type: http
+      scheme: bearer
+      description: JWT token from /auth/login
+    botAuth:
+      type: http
+      scheme: bearer
+      description: Bot API token from bot creation
+
+  schemas:
+    Response:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        data:
+          description: Response payload (varies by endpoint)
+        error:
+          type: string
+          description: Error message (only when ok=false)
+
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        username:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    Bot:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        owner_id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, disabled]
+        created_at:
+          type: string
+          format: date-time
+
+    Conversation:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        bot_id:
+          type: integer
+          format: int64
+        title:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        bot:
+          $ref: '#/components/schemas/Bot'
+
+    StatusLayer:
+      type: object
+      properties:
+        phase:
+          type: string
+        progress:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 1
+        text:
+          type: string
+
+    InteractionOption:
+      type: object
+      properties:
+        label:
+          type: string
+        value:
+          type: string
+
+    Interaction:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [approval, choice, form]
+        prompt:
+          type: string
+        options:
+          type: array
+          items:
+            $ref: '#/components/schemas/InteractionOption'
+
+    MessageLayers:
+      type: object
+      properties:
+        thinking:
+          type: string
+          description: Reasoning chain (collapsible in UI)
+        status:
+          $ref: '#/components/schemas/StatusLayer'
+        data:
+          type: object
+          description: Structured JSON for agent consumption
+        summary:
+          type: string
+          description: Natural language for human reading
+        interaction:
+          $ref: '#/components/schemas/Interaction'
+
+    Message:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        conversation_id:
+          type: integer
+          format: int64
+        stream_id:
+          type: string
+        sender_type:
+          type: string
+          enum: [user, bot]
+        sender_id:
+          type: integer
+          format: int64
+        layers:
+          $ref: '#/components/schemas/MessageLayers'
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  /api/v1/ping:
+    get:
+      summary: Health check
+      operationId: ping
+      responses:
+        '200':
+          description: Server is running
+          content:
+            application/json:
+              example:
+                ok: true
+                data: pong
+
+  /api/v1/auth/login:
+    post:
+      summary: User login
+      operationId: login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+            example:
+              username: chris
+              password: admin123
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              example:
+                ok: true
+                data:
+                  token: eyJhbGciOiJIUzI1NiIs...
+                  user:
+                    id: 1
+                    username: chris
+        '401':
+          description: Invalid credentials
+
+  /api/v1/bots:
+    post:
+      summary: Create a new bot
+      operationId: createBot
+      security:
+        - userAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+            example:
+              name: Pi-mono
+      responses:
+        '201':
+          description: Bot created. Token is shown only once.
+          content:
+            application/json:
+              example:
+                ok: true
+                data:
+                  id: 1
+                  name: Pi-mono
+                  token: 7fac230f-e9cb-4a02-825b-070ae57c9ae1
+
+    get:
+      summary: List my bots
+      operationId: listBots
+      security:
+        - userAuth: []
+      responses:
+        '200':
+          description: List of bots
+          content:
+            application/json:
+              example:
+                ok: true
+                data:
+                  - id: 1
+                    owner_id: 1
+                    name: Pi-mono
+                    status: active
+
+  /api/v1/bots/{id}:
+    delete:
+      summary: Delete a bot
+      operationId: deleteBot
+      security:
+        - userAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Bot deleted
+
+  /api/v1/bot/me:
+    get:
+      summary: Get current bot info
+      operationId: botMe
+      security:
+        - botAuth: []
+      responses:
+        '200':
+          description: Bot information
+          content:
+            application/json:
+              example:
+                ok: true
+                data:
+                  id: 1
+                  owner_id: 1
+                  name: Pi-mono
+                  status: active
+
+  /api/v1/conversations:
+    post:
+      summary: Create a new conversation
+      operationId: createConversation
+      security:
+        - userAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bot_id]
+              properties:
+                bot_id:
+                  type: integer
+                  format: int64
+                title:
+                  type: string
+            example:
+              bot_id: 1
+              title: Write blog post
+      responses:
+        '201':
+          description: Conversation created
+
+    get:
+      summary: List conversations
+      operationId: listConversations
+      description: |
+        Returns conversations for the authenticated entity.
+        - Users see their conversations
+        - Bots see conversations they participate in
+      security:
+        - userAuth: []
+        - botAuth: []
+      responses:
+        '200':
+          description: List of conversations
+
+  /api/v1/conversations/{id}:
+    get:
+      summary: Get conversation detail
+      operationId: getConversation
+      security:
+        - userAuth: []
+        - botAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Conversation with user and bot info
+
+  /api/v1/conversations/{id}/messages:
+    get:
+      summary: Get message history
+      operationId: listMessages
+      description: Returns messages newest-first with cursor pagination.
+      security:
+        - userAuth: []
+        - botAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+        - name: before
+          in: query
+          description: Only return messages with id < before (cursor)
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          description: Number of messages to return (default 20, max 100)
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Message list with pagination info
+          content:
+            application/json:
+              example:
+                ok: true
+                data:
+                  messages:
+                    - id: 2
+                      conversation_id: 1
+                      sender_type: bot
+                      sender_id: 1
+                      layers:
+                        summary: Blog post ready.
+                        thinking: Wrote 500 words.
+                        status:
+                          phase: complete
+                          progress: 1.0
+                      created_at: "2026-02-28T10:05:01Z"
+                    - id: 1
+                      conversation_id: 1
+                      sender_type: user
+                      sender_id: 1
+                      layers:
+                        summary: Write a blog post
+                      created_at: "2026-02-28T10:05:00Z"
+                  has_more: false
+
+  /api/v1/messages/send:
+    post:
+      summary: Send a message
+      operationId: sendMessage
+      description: |
+        Send a message to a conversation. Works for both users and bots.
+        The server persists the message and broadcasts it to all participants via WebSocket.
+      security:
+        - userAuth: []
+        - botAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversation_id]
+              properties:
+                conversation_id:
+                  type: integer
+                  format: int64
+                layers:
+                  $ref: '#/components/schemas/MessageLayers'
+                stream_id:
+                  type: string
+                  description: Groups related messages in a stream
+            examples:
+              simple:
+                summary: Simple text message
+                value:
+                  conversation_id: 1
+                  layers:
+                    summary: Hello! How can I help?
+              full:
+                summary: Message with all layers
+                value:
+                  conversation_id: 1
+                  layers:
+                    summary: Blog post outline ready for review.
+                    thinking: Analyzed the topic, identified 3 sections.
+                    status:
+                      phase: drafting
+                      progress: 0.5
+                      text: Outline complete
+                    data:
+                      outline:
+                        - Why Agent-Native IM
+                        - Architecture
+                        - Use Cases
+                    interaction:
+                      type: approval
+                      prompt: Approve this outline?
+                      options:
+                        - label: Approve
+                          value: approve
+                        - label: Revise
+                          value: revise
+      responses:
+        '201':
+          description: Message sent and persisted
+
+  /api/v1/updates:
+    get:
+      summary: Long polling for new messages
+      operationId: getUpdates
+      description: |
+        Returns new messages for the authenticated bot. If no messages are available,
+        holds the connection open until a message arrives or timeout.
+      security:
+        - botAuth: []
+      parameters:
+        - name: offset
+          in: query
+          description: Only return messages with id > offset
+          schema:
+            type: integer
+            default: 0
+        - name: timeout
+          in: query
+          description: Max seconds to wait (1-60)
+          schema:
+            type: integer
+            default: 30
+      responses:
+        '200':
+          description: Array of new messages (may be empty on timeout)
+          content:
+            application/json:
+              example:
+                ok: true
+                data:
+                  - id: 5
+                    conversation_id: 1
+                    sender_type: user
+                    sender_id: 1
+                    layers:
+                      summary: Please write a report
+                    created_at: "2026-02-28T10:10:00Z"
+
+  /api/v1/ws:
+    get:
+      summary: WebSocket connection
+      operationId: websocket
+      description: |
+        Upgrade to WebSocket for real-time bidirectional messaging.
+        Pass token as query parameter.
+
+        **Inbound message types** (client → server):
+        - `message.send` — send a message (same format as REST send)
+        - `ping` — keepalive
+
+        **Outbound message types** (server → client):
+        - `message.new` — new message in a conversation you participate in
+        - `stream.start` — bot started streaming (ephemeral)
+        - `stream.delta` — streaming progress update (ephemeral)
+        - `stream.end` — streaming complete (persisted)
+        - `pong` — keepalive response
+        - `error` — error notification
+
+        **Streaming via WebSocket:**
+        ```json
+        // Start stream
+        {"type": "message.send", "data": {
+          "conversation_id": 1, "stream_id": "task-1",
+          "stream_type": "start",
+          "layers": {"status": {"phase": "starting", "progress": 0}}
+        }}
+        // Delta (not persisted)
+        {"type": "message.send", "data": {
+          "conversation_id": 1, "stream_id": "task-1",
+          "stream_type": "delta",
+          "layers": {"status": {"phase": "working", "progress": 0.5}}
+        }}
+        // End (persisted)
+        {"type": "message.send", "data": {
+          "conversation_id": 1, "stream_id": "task-1",
+          "stream_type": "end",
+          "layers": {"summary": "Task complete."}
+        }}
+        ```
+      parameters:
+        - name: token
+          in: query
+          required: true
+          description: JWT token (user) or API token (bot)
+          schema:
+            type: string

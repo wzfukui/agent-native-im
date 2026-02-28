@@ -1,11 +1,36 @@
+# Dependencies
 node_modules/
+vendor/
+
+# Environment
 .env
 .env.local
+
+# Build
 dist/
 build/
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Python
 *.pyc
 __pycache__/
+
+# Data
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# IDE
 .DS_Store
 *.log
 .vscode/
 .idea/
+
+# Test
+*.test
+*.out
