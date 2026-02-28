@@ -2,6 +2,8 @@ package handler
 
 import (
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -66,6 +68,26 @@ func NewRouter(s *Server) *gin.Engine {
 
 		// WebSocket (auth via query param)
 		v1.GET("/ws", s.HandleWS)
+	}
+
+	// Serve web frontend from web/dist/ if it exists (SPA fallback)
+	distPath := filepath.Join("web", "dist")
+	if info, err := os.Stat(distPath); err == nil && info.IsDir() {
+		r.NoRoute(func(c *gin.Context) {
+			// Don't serve SPA for API paths
+			if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+				c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "not found"})
+				return
+			}
+			// Try to serve static file
+			filePath := filepath.Join(distPath, c.Request.URL.Path)
+			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
+				c.File(filePath)
+				return
+			}
+			// SPA fallback: serve index.html
+			c.File(filepath.Join(distPath, "index.html"))
+		})
 	}
 
 	return r

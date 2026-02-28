@@ -7,9 +7,9 @@ vendor/
 .env.local
 
 # Build
-dist/
 build/
 bin/
+web/dist/
 *.exe
 *.dll
 *.so
