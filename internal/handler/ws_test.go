@@ -1,0 +1,410 @@
+package handler_test
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"net/http"
+	"testing"
+	"time"
+
+	gorillaWs "github.com/gorilla/websocket"
+)
+
+func TestWebSocketConnect(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], token)
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial: %v", err)
+	}
+	defer conn.Close()
+
+	// Send ping, expect pong
+	msg := map[string]string{"type": "ping"}
+	if err := conn.WriteJSON(msg); err != nil {
+		t.Fatalf("ws write: %v", err)
+	}
+
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var resp map[string]interface{}
+	if err := conn.ReadJSON(&resp); err != nil {
+		t.Fatalf("ws read: %v", err)
+	}
+
+	if resp["type"] != "pong" {
+		t.Fatalf("expected pong, got %v", resp["type"])
+	}
+}
+
+func TestWebSocketNoToken(t *testing.T) {
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	// Without token — should get HTTP error, not upgrade
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	_, resp, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	if err == nil {
+		t.Fatal("expected error for no token")
+	}
+	if resp != nil && resp.StatusCode != http.StatusUnauthorized {
+		// WebSocket libraries may return different codes depending on how the server rejects
+		t.Logf("got status %d (expected 401 or connection refused)", resp.StatusCode)
+	}
+}
+
+func TestWebSocketSendMessage(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create a conversation first
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title": "WS Message Test",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], token)
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(100 * time.Millisecond)
+
+	// Send a message via WebSocket
+	sendMsg := map[string]interface{}{
+		"type": "message.send",
+		"data": map[string]interface{}{
+			"conversation_id": convID,
+			"content_type":    "text",
+			"layers":          map[string]string{"summary": "Hello via WS"},
+		},
+	}
+	if err := conn.WriteJSON(sendMsg); err != nil {
+		t.Fatalf("ws write: %v", err)
+	}
+
+	// Should receive broadcast back (since we're the only participant)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_, rawMsg, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("ws read: %v", err)
+	}
+
+	var received map[string]interface{}
+	json.Unmarshal(rawMsg, &received)
+	if received["type"] != "message.new" {
+		t.Fatalf("expected type=message.new, got %v", received["type"])
+	}
+}
+
+func TestWebSocketStreamProtocol(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create a bot and approve it to get a permanent key for the receiver
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "stream-receiver"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := botEntity["id"].(float64)
+	bootstrapKey, _ := botData["bootstrap_key"].(string)
+
+	// Create conversation with bot
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Stream Test",
+		"conv_type":       "group",
+		"participant_ids": []float64{botID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	// Set bot subscription to subscribe_all so it receives all messages
+	ctx := context.Background()
+	if err := testStore.UpdateSubscription(ctx, int64(convID), int64(botID), "subscribe_all"); err != nil {
+		t.Fatalf("update subscription: %v", err)
+	}
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	// Sender (admin) connects
+	senderURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], token)
+	senderConn, _, err := gorillaWs.DefaultDialer.Dial(senderURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial sender: %v", err)
+	}
+	defer senderConn.Close()
+
+	// Receiver (bot) connects with bootstrap key
+	receiverURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], bootstrapKey)
+	receiverConn, _, err := gorillaWs.DefaultDialer.Dial(receiverURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial receiver: %v", err)
+	}
+	defer receiverConn.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	streamID := "test-stream-001"
+
+	// 1. stream_start (ephemeral)
+	senderConn.WriteJSON(map[string]interface{}{
+		"type": "message.send",
+		"data": map[string]interface{}{
+			"conversation_id": convID,
+			"stream_type":     "start",
+			"stream_id":       streamID,
+			"layers":          map[string]string{"summary": ""},
+		},
+	})
+
+	// 2. stream_delta (ephemeral)
+	senderConn.WriteJSON(map[string]interface{}{
+		"type": "message.send",
+		"data": map[string]interface{}{
+			"conversation_id": convID,
+			"stream_type":     "delta",
+			"stream_id":       streamID,
+			"layers":          map[string]string{"summary": "Partial content..."},
+		},
+	})
+
+	// 3. stream_end (persisted)
+	senderConn.WriteJSON(map[string]interface{}{
+		"type": "message.send",
+		"data": map[string]interface{}{
+			"conversation_id": convID,
+			"stream_type":     "end",
+			"stream_id":       streamID,
+			"content_type":    "markdown",
+			"layers":          map[string]string{"summary": "Final complete content"},
+		},
+	})
+
+	// Receiver should get: stream.start, stream.delta, message.new
+	received := readWSMessages(t, receiverConn, 3, 3*time.Second)
+
+	hasStreamStart := false
+	hasStreamDelta := false
+	hasMessageNew := false
+	for _, msg := range received {
+		switch msg["type"].(string) {
+		case "stream.start":
+			hasStreamStart = true
+		case "stream.delta":
+			hasStreamDelta = true
+		case "message.new":
+			hasMessageNew = true
+		}
+	}
+
+	if !hasStreamStart {
+		t.Error("receiver missing stream.start event")
+	}
+	if !hasStreamDelta {
+		t.Error("receiver missing stream.delta event")
+	}
+	if !hasMessageNew {
+		t.Error("receiver missing message.new event")
+	}
+
+	// Verify only the final message was persisted in DB
+	msgResp := doJSON(t, "GET", fmt.Sprintf("/api/v1/conversations/%d/messages?limit=10", convID), ptr(token), nil)
+	assertStatus(t, msgResp, http.StatusOK)
+	msgData := parseOK(t, msgResp)
+	msgs := msgData["messages"].([]interface{})
+	if len(msgs) != 1 {
+		t.Fatalf("expected exactly 1 persisted message, got %d", len(msgs))
+	}
+
+	persistedMsg := msgs[0].(map[string]interface{})
+	if persistedMsg["stream_id"] != streamID {
+		t.Fatalf("expected stream_id=%s, got %v", streamID, persistedMsg["stream_id"])
+	}
+}
+
+func TestWebSocketBootstrapKey(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot with bootstrap key
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "ws-boot-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	bootstrapKey, _ := data["bootstrap_key"].(string)
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	// Should be able to connect with bootstrap key
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], bootstrapKey)
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial with bootstrap key: %v", err)
+	}
+	conn.Close()
+}
+
+func TestWebSocketRevokeEvent(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create a second user to receive the revoke event
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
+		"username": "revoke-observer",
+		"password": "observer123",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	observerData := parseOK(t, resp)
+	observerID := observerData["id"].(float64)
+	observerToken := login(t, "revoke-observer", "observer123")
+
+	// Create conversation with observer
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Revoke Event Test",
+		"conv_type":       "group",
+		"participant_ids": []float64{observerID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	// Set observer to subscribe_all so they receive all events
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/conversations/%d/subscription", convID), ptr(observerToken), map[string]string{
+		"mode": "subscribe_all",
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	// Observer connects via WS
+	observerURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], observerToken)
+	observerConn, _, err := gorillaWs.DefaultDialer.Dial(observerURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial observer: %v", err)
+	}
+	defer observerConn.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Send a message via HTTP
+	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
+		"conversation_id": convID,
+		"content_type":    "text",
+		"layers":          map[string]string{"summary": "to be revoked"},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	msgData := parseOK(t, resp)
+	msgID := int(msgData["id"].(float64))
+
+	// Read the message.new event
+	observerConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var newMsg map[string]interface{}
+	observerConn.ReadJSON(&newMsg)
+
+	// Revoke the message
+	resp = doJSON(t, "DELETE", fmt.Sprintf("/api/v1/messages/%d", msgID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	// Read the revoke event — should be "message.revoked" (NOT "stream.message.revoked")
+	observerConn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var revokeMsg map[string]interface{}
+	if err := observerConn.ReadJSON(&revokeMsg); err != nil {
+		t.Fatalf("ws read revoke: %v", err)
+	}
+
+	if revokeMsg["type"] != "message.revoked" {
+		t.Fatalf("expected type=message.revoked, got %v", revokeMsg["type"])
+	}
+}
+
+// TestHumanAlwaysReceivesGroupMessages verifies that human users receive all messages
+// in a group conversation regardless of subscription mode (they bypass mention_only filtering).
+func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create a second human user
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
+		"username": "human2",
+		"password": "human2pass",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	human2Data := parseOK(t, resp)
+	human2ID := human2Data["id"].(float64)
+	human2Token := login(t, "human2", "human2pass")
+
+	// Create group with human2
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Human Test",
+		"conv_type":       "group",
+		"participant_ids": []float64{human2ID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	// human2's default subscription_mode is mention_only, but they should still get messages
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], human2Token)
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("ws dial: %v", err)
+	}
+	defer conn.Close()
+
+	time.Sleep(200 * time.Millisecond)
+
+	// Admin sends a message without mentioning human2
+	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
+		"conversation_id": convID,
+		"layers":          map[string]string{"summary": "No mention here"},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+
+	// Human2 should still receive the message (humans bypass subscription filtering)
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var wsMsg map[string]interface{}
+	if err := conn.ReadJSON(&wsMsg); err != nil {
+		t.Fatalf("human user should receive group message even without mention: %v", err)
+	}
+	if wsMsg["type"] != "message.new" {
+		t.Fatalf("expected type=message.new, got %v", wsMsg["type"])
+	}
+}
+
+// readWSMessages reads up to n messages from the WebSocket within the timeout.
+func readWSMessages(t *testing.T, conn *gorillaWs.Conn, n int, timeout time.Duration) []map[string]interface{} {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var messages []map[string]interface{}
+
+	for len(messages) < n {
+		conn.SetReadDeadline(deadline)
+		_, raw, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+		var msg map[string]interface{}
+		json.Unmarshal(raw, &msg)
+		messages = append(messages, msg)
+	}
+
+	return messages
+}

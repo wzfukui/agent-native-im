@@ -63,7 +63,21 @@ func (s *Server) HandleDeleteWebhook(c *gin.Context) {
 		return
 	}
 
-	if err := s.Store.DeleteWebhook(c.Request.Context(), whID); err != nil {
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	// Verify ownership
+	wh, err := s.Store.GetWebhookByID(ctx, whID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "webhook not found")
+		return
+	}
+	if wh.EntityID != entityID {
+		Fail(c, http.StatusForbidden, "not the owner of this webhook")
+		return
+	}
+
+	if err := s.Store.DeleteWebhook(ctx, whID); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to delete webhook")
 		return
 	}

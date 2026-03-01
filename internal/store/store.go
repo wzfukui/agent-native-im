@@ -31,7 +31,10 @@ type CredentialStore interface {
 	CreateCredential(ctx context.Context, cred *model.Credential) error
 	GetCredentialsByEntity(ctx context.Context, entityID int64, credType model.CredType) ([]*model.Credential, error)
 	GetCredentialByPrefix(ctx context.Context, credType model.CredType, prefix string) ([]*model.Credential, error)
+	UpdateCredential(ctx context.Context, cred *model.Credential) error
 	DeleteCredentialsByEntity(ctx context.Context, entityID int64) error
+	DeleteCredential(ctx context.Context, credentialID int64) error
+	DeleteCredentialsByType(ctx context.Context, entityID int64, credType model.CredType) error
 }
 
 type ConversationStore interface {
@@ -47,16 +50,22 @@ type ParticipantStore interface {
 	ListParticipants(ctx context.Context, conversationID int64) ([]*model.Participant, error)
 	IsParticipant(ctx context.Context, conversationID, entityID int64) (bool, error)
 	GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error)
+	GetParticipant(ctx context.Context, conversationID, entityID int64) (*model.Participant, error)
+	UpdateSubscription(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode) error
 }
 
 type MessageStore interface {
 	CreateMessage(ctx context.Context, msg *model.Message) error
+	GetMessageByID(ctx context.Context, id int64) (*model.Message, error)
 	ListMessages(ctx context.Context, conversationID int64, before int64, limit int) ([]*model.Message, error)
+	SearchMessages(ctx context.Context, conversationID int64, query string, limit int) ([]*model.Message, error)
 	GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error)
+	RevokeMessage(ctx context.Context, messageID int64) error
 }
 
 type WebhookStore interface {
 	CreateWebhook(ctx context.Context, wh *model.Webhook) error
+	GetWebhookByID(ctx context.Context, id int64) (*model.Webhook, error)
 	ListWebhooksByEntity(ctx context.Context, entityID int64) ([]*model.Webhook, error)
 	GetWebhooksForConversation(ctx context.Context, conversationID int64, event string) ([]*model.Webhook, error)
 	DeleteWebhook(ctx context.Context, id int64) error

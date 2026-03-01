@@ -18,7 +18,7 @@ type Hub struct {
 
 	// conversation -> set of clients
 	convClients map[int64]map[*Client]bool
-	mu          sync.RWMutex
+	mu          sync.RWMutex // protects clients AND convClients
 
 	// Long polling waiters: entityID -> channels
 	waiters  map[int64][]chan struct{}
@@ -41,29 +41,100 @@ func (h *Hub) Run() {
 	for {
 		select {
 		case client := <-h.register:
+			h.mu.Lock()
+			wasOnline := h.isOnlineLocked(client.entityID)
 			h.clients[client] = true
-			h.subscribeClient(client)
-			log.Printf("ws: entity %d connected (total: %d)", client.entityID, len(h.clients))
+			h.subscribeClientLocked(client)
+			total := len(h.clients)
+			h.mu.Unlock()
+
+			log.Printf("ws: entity %d connected (total: %d)", client.entityID, total)
+
+			if !wasOnline {
+				h.broadcastPresence(client.entityID, true)
+			}
 
 		case client := <-h.unregister:
+			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
-				h.unsubscribeClient(client)
-				log.Printf("ws: entity %d disconnected (total: %d)", client.entityID, len(h.clients))
+				h.unsubscribeClientLocked(client)
+				stillOnline := h.isOnlineLocked(client.entityID)
+				total := len(h.clients)
+				h.mu.Unlock()
+
+				log.Printf("ws: entity %d disconnected (total: %d)", client.entityID, total)
+
+				if !stillOnline {
+					h.broadcastPresence(client.entityID, false)
+				}
+			} else {
+				h.mu.Unlock()
 			}
 		}
 	}
+}
+
+// isOnlineLocked checks if an entity has active connections. Caller must hold h.mu (read or write).
+func (h *Hub) isOnlineLocked(entityID int64) bool {
+	for client := range h.clients {
+		if client.entityID == entityID {
+			return true
+		}
+	}
+	return false
+}
+
+// broadcastPresence sends entity.online/entity.offline to all conversations the entity belongs to.
+func (h *Hub) broadcastPresence(entityID int64, online bool) {
+	eventType := "entity.offline"
+	if online {
+		eventType = "entity.online"
+	}
+
+	msg := WSMessage{
+		Type: eventType,
+		Data: map[string]interface{}{
+			"entity_id": entityID,
+			"online":    online,
+		},
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	// Get all conversations this entity belongs to
+	ctx := context.Background()
+	convIDs, err := h.store.GetConversationIDsByEntity(ctx, entityID)
+	if err != nil {
+		return
+	}
+
+	h.mu.RLock()
+	sent := make(map[*Client]bool)
+	for _, convID := range convIDs {
+		for client := range h.convClients[convID] {
+			if client.entityID == entityID || sent[client] {
+				continue
+			}
+			select {
+			case client.send <- data:
+			default:
+			}
+			sent[client] = true
+		}
+	}
+	h.mu.RUnlock()
 }
 
 func (h *Hub) Register(client *Client) {
 	h.register <- client
 }
 
-func (h *Hub) subscribeClient(client *Client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
+// subscribeClientLocked subscribes a client to its conversations. Caller must hold h.mu write lock.
+func (h *Hub) subscribeClientLocked(client *Client) {
 	ctx := context.Background()
 	ids, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
 	if err != nil {
@@ -79,10 +150,8 @@ func (h *Hub) subscribeClient(client *Client) {
 	}
 }
 
-func (h *Hub) unsubscribeClient(client *Client) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-
+// unsubscribeClientLocked removes a client from all conversations. Caller must hold h.mu write lock.
+func (h *Hub) unsubscribeClientLocked(client *Client) {
 	for convID, clients := range h.convClients {
 		delete(clients, client)
 		if len(clients) == 0 {
@@ -109,7 +178,53 @@ func (h *Hub) NotifyNewConversation(convID int64, entityIDs ...int64) {
 	}
 }
 
-// BroadcastMessage sends a persisted message to all connected clients in the conversation.
+// SendToEntity sends a message to all WebSocket connections of a specific entity.
+func (h *Hub) SendToEntity(entityID int64, msg WSMessage) {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	h.mu.RLock()
+	// Collect targets under lock
+	var targets []*Client
+	for client := range h.clients {
+		if client.entityID == entityID {
+			targets = append(targets, client)
+		}
+	}
+	h.mu.RUnlock()
+
+	// Send outside lock
+	for _, client := range targets {
+		select {
+		case client.send <- data:
+		default:
+		}
+	}
+}
+
+// IsOnline returns true if the entity has at least one active WebSocket connection.
+func (h *Hub) IsOnline(entityID int64) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.isOnlineLocked(entityID)
+}
+
+// copyConvClients returns a snapshot of clients for a conversation. Caller should NOT hold h.mu.
+func (h *Hub) copyConvClients(convID int64) []*Client {
+	h.mu.RLock()
+	src := h.convClients[convID]
+	result := make([]*Client, 0, len(src))
+	for client := range src {
+		result = append(result, client)
+	}
+	h.mu.RUnlock()
+	return result
+}
+
+// BroadcastMessage sends a persisted message to all connected clients in the conversation,
+// respecting each participant's subscription mode.
 func (h *Hub) BroadcastMessage(msg *model.Message) {
 	payload := WSMessage{
 		Type: "message.new",
@@ -120,14 +235,68 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 		return
 	}
 
-	h.mu.RLock()
-	clients := h.convClients[msg.ConversationID]
-	h.mu.RUnlock()
+	// Build mention set for quick lookup
+	mentionSet := make(map[int64]bool, len(msg.Mentions))
+	for _, eid := range msg.Mentions {
+		mentionSet[eid] = true
+	}
 
-	for client := range clients {
-		select {
-		case client.send <- data:
-		default:
+	// Load participant subscription modes and entity types
+	ctx := context.Background()
+	participants, err := h.store.ListParticipants(ctx, msg.ConversationID)
+	if err != nil {
+		log.Printf("ws: failed to load participants for conversation %d: %v", msg.ConversationID, err)
+	}
+	subModes := make(map[int64]model.SubscriptionMode)
+	entityTypes := make(map[int64]model.EntityType)
+	for _, p := range participants {
+		subModes[p.EntityID] = p.SubscriptionMode
+		if p.Entity != nil {
+			entityTypes[p.EntityID] = p.Entity.EntityType
+		}
+	}
+
+	// Snapshot clients under lock, iterate without lock
+	clients := h.copyConvClients(msg.ConversationID)
+
+	for _, client := range clients {
+		// Always deliver to the sender
+		if client.entityID == msg.SenderID {
+			select {
+			case client.send <- data:
+			default:
+			}
+			continue
+		}
+
+		// Human users always receive all messages in groups
+		if entityTypes[client.entityID] == model.EntityUser {
+			select {
+			case client.send <- data:
+			default:
+			}
+			continue
+		}
+
+		// Bots/services: respect subscription mode
+		mode := subModes[client.entityID]
+		if mode == "" {
+			mode = model.SubMentionOnly
+		}
+
+		shouldDeliver := false
+		switch mode {
+		case model.SubSubscribeAll:
+			shouldDeliver = true
+		case model.SubMentionOnly:
+			shouldDeliver = mentionSet[client.entityID]
+		}
+
+		if shouldDeliver {
+			select {
+			case client.send <- data:
+			default:
+			}
 		}
 	}
 
@@ -146,14 +315,34 @@ func (h *Hub) BroadcastStream(convID int64, streamType string, payload interface
 		return
 	}
 
-	h.mu.RLock()
-	clients := h.convClients[convID]
-	h.mu.RUnlock()
+	clients := h.copyConvClients(convID)
 
-	for client := range clients {
+	for _, client := range clients {
 		if client == excludeClient {
 			continue
 		}
+		select {
+		case client.send <- data:
+		default:
+		}
+	}
+}
+
+// BroadcastEvent sends a non-stream event to all clients in a conversation.
+// Unlike BroadcastStream, it does NOT prepend "stream." to the type.
+func (h *Hub) BroadcastEvent(convID int64, eventType string, payload interface{}) {
+	msg := WSMessage{
+		Type: eventType,
+		Data: payload,
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	clients := h.copyConvClients(convID)
+
+	for _, client := range clients {
 		select {
 		case client.send <- data:
 		default:
@@ -205,6 +394,8 @@ func (h *Hub) handleSend(client *Client, rawData []byte) {
 		ContentType:    contentType,
 		Layers:         payload.Layers,
 		Attachments:    payload.Attachments,
+		Mentions:       payload.Mentions,
+		ReplyTo:        payload.ReplyTo,
 	}
 
 	if err := h.store.CreateMessage(ctx, msg); err != nil {
@@ -237,6 +428,9 @@ func (h *Hub) UnregisterWaiter(entityID int64, ch chan struct{}) {
 			break
 		}
 	}
+	if len(h.waiters[entityID]) == 0 {
+		delete(h.waiters, entityID)
+	}
 }
 
 // notifyParticipantWaiters notifies long-polling waiters for all participants
@@ -261,6 +455,6 @@ func (h *Hub) notifyParticipantWaiters(conversationID, senderID int64) {
 			default:
 			}
 		}
-		h.waiters[p.EntityID] = nil
+		// Don't nil out — let UnregisterWaiter clean up properly
 	}
 }

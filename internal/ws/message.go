@@ -27,4 +27,6 @@ type SendPayload struct {
 	ContentType    model.ContentType   `json:"content_type,omitempty"`
 	Layers         model.MessageLayers `json:"layers"`
 	Attachments    []model.Attachment  `json:"attachments,omitempty"`
+	Mentions       []int64             `json:"mentions,omitempty"`
+	ReplyTo        *int64              `json:"reply_to,omitempty"`
 }

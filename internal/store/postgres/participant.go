@@ -41,6 +41,29 @@ func (s *PGStore) IsParticipant(ctx context.Context, conversationID, entityID in
 	return exists, err
 }
 
+func (s *PGStore) GetParticipant(ctx context.Context, conversationID, entityID int64) (*model.Participant, error) {
+	p := new(model.Participant)
+	err := s.DB.NewSelect().Model(p).
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *PGStore) UpdateSubscription(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("subscription_mode = ?", mode).
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
 func (s *PGStore) GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error) {
 	var ids []int64
 	err := s.DB.NewSelect().Model((*model.Participant)(nil)).

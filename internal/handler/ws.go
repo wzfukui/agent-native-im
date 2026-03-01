@@ -1,10 +1,12 @@
 package handler
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	gorillaWs "github.com/gorilla/websocket"
@@ -27,6 +29,7 @@ func (s *Server) HandleWS(c *gin.Context) {
 	}
 
 	var entityID int64
+	var isBootstrap bool
 
 	// Try JWT first
 	claims, err := auth.ParseToken(s.Config.JWTSecret, token)
@@ -34,17 +37,13 @@ func (s *Server) HandleWS(c *gin.Context) {
 		entityID = claims.EntityID
 	} else {
 		// Try API key
-		if len(token) >= 8 {
-			eid, err := s.resolveAPIKey(c, token)
-			if err != nil {
-				Fail(c, http.StatusUnauthorized, "invalid token")
-				return
-			}
-			entityID = eid
-		} else {
+		cred, err := auth.ResolveAPIKey(c.Request.Context(), s.Store, token)
+		if err != nil {
 			Fail(c, http.StatusUnauthorized, "invalid token")
 			return
 		}
+		entityID = cred.EntityID
+		isBootstrap = cred.CredType == model.CredBootstrap
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -58,23 +57,44 @@ func (s *Server) HandleWS(c *gin.Context) {
 
 	go client.WritePump()
 	go client.ReadPump()
+
+	// Auto-approve if configured and the agent connected with a bootstrap key
+	if isBootstrap && s.Config.AutoApproveAgents {
+		go s.autoApproveEntity(entityID)
+	}
 }
 
-// resolveAPIKey looks up an entity by API key. Returns entity ID on success.
-func (s *Server) resolveAPIKey(c *gin.Context, apiKey string) (int64, error) {
-	prefix := apiKey[:8]
-	fullHash := fmt.Sprintf("%x", sha256.Sum256([]byte(apiKey)))
+// autoApproveEntity generates a permanent key, deletes bootstrap creds, and pushes via WS.
+func (s *Server) autoApproveEntity(entityID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	permanentKey := generateKey(keyPrefixPermanent)
+	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(permanentKey)))
 
-	creds, err := s.Store.GetCredentialByPrefix(c.Request.Context(), model.CredAPIKey, prefix)
-	if err != nil {
-		return 0, err
+	cred := &model.Credential{
+		EntityID:   entityID,
+		CredType:   model.CredAPIKey,
+		SecretHash: keyHash,
+		RawPrefix:  permanentKey[:8],
 	}
 
-	for _, cred := range creds {
-		if cred.SecretHash == fullHash {
-			return cred.EntityID, nil
-		}
+	if err := s.Store.CreateCredential(ctx, cred); err != nil {
+		log.Printf("auto-approve: failed to create credential for entity %d: %v", entityID, err)
+		return
 	}
 
-	return 0, fmt.Errorf("api key not found")
+	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredBootstrap); err != nil {
+		log.Printf("auto-approve: failed to delete bootstrap keys for entity %d: %v", entityID, err)
+		return
+	}
+
+	s.Hub.SendToEntity(entityID, ws_pkg.WSMessage{
+		Type: "connection.approved",
+		Data: map[string]interface{}{
+			"api_key": permanentKey,
+			"message": "Connection auto-approved. Use this permanent key for all future requests.",
+		},
+	})
+
+	log.Printf("auto-approve: entity %d approved with permanent key", entityID)
 }

@@ -29,9 +29,29 @@ func (s *PGStore) GetCredentialByPrefix(ctx context.Context, credType model.Cred
 	return creds, err
 }
 
+func (s *PGStore) UpdateCredential(ctx context.Context, cred *model.Credential) error {
+	_, err := s.DB.NewUpdate().Model(cred).WherePK().Exec(ctx)
+	return err
+}
+
 func (s *PGStore) DeleteCredentialsByEntity(ctx context.Context, entityID int64) error {
 	_, err := s.DB.NewDelete().Model((*model.Credential)(nil)).
 		Where("entity_id = ?", entityID).
+		Exec(ctx)
+	return err
+}
+
+func (s *PGStore) DeleteCredential(ctx context.Context, credentialID int64) error {
+	_, err := s.DB.NewDelete().Model((*model.Credential)(nil)).
+		Where("id = ?", credentialID).
+		Exec(ctx)
+	return err
+}
+
+func (s *PGStore) DeleteCredentialsByType(ctx context.Context, entityID int64, credType model.CredType) error {
+	_, err := s.DB.NewDelete().Model((*model.Credential)(nil)).
+		Where("entity_id = ?", entityID).
+		Where("cred_type = ?", credType).
 		Exec(ctx)
 	return err
 }

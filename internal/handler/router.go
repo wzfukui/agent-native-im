@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/config"
+	"github.com/wzfukui/agent-native-im/internal/filestore"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/store"
 	"github.com/wzfukui/agent-native-im/internal/webhook"
@@ -22,11 +23,12 @@ func (a *AuthHelper) GenerateToken(entityID int64, entityType model.EntityType) 
 }
 
 type Server struct {
-	Config  *config.Config
-	Store   store.Store
-	Hub     *ws.Hub
-	Webhook *webhook.Deliverer
-	Auth    *AuthHelper
+	Config    *config.Config
+	Store     store.Store
+	Hub       *ws.Hub
+	Webhook   *webhook.Deliverer
+	Auth      *AuthHelper
+	FileStore filestore.FileStore
 }
 
 func NewRouter(s *Server) *gin.Engine {
@@ -39,42 +41,71 @@ func NewRouter(s *Server) *gin.Engine {
 		v1.GET("/ping", HandlePing)
 		v1.POST("/auth/login", s.HandleLogin)
 
-		// Authenticated (any entity type)
+		// Authenticated (any entity type, including bootstrap keys)
 		authed := v1.Group("")
 		authed.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
 		{
-			// Entity self-info
+			// Bootstrap-key-accessible endpoints
 			authed.GET("/me", s.HandleMe)
+			authed.POST("/auth/refresh", s.HandleRefreshToken)
 
-			// Entity management (user-only at handler level)
-			authed.POST("/entities", s.HandleCreateEntity)
-			authed.GET("/entities", s.HandleListEntities)
-			authed.DELETE("/entities/:id", s.HandleDeleteEntity)
+			// Full-auth-only endpoints (bootstrap keys blocked)
+			full := authed.Group("")
+			full.Use(auth.RequireFullAuth())
+			{
+				// User management
+				full.PUT("/me", s.HandleUpdateProfile)
+				full.PUT("/me/password", s.HandleChangePassword)
 
-			// Webhook management
-			authed.POST("/webhooks", s.HandleCreateWebhook)
-			authed.GET("/webhooks", s.HandleListWebhooks)
-			authed.DELETE("/webhooks/:id", s.HandleDeleteWebhook)
+				// Admin-only endpoints
+				admin := full.Group("")
+				admin.Use(auth.RequireAdmin(s.Store, s.Config.AdminUser))
+				{
+					admin.POST("/admin/users", s.HandleCreateUser)
+				}
+				// Entity management (user-only at handler level)
+				full.POST("/entities", s.HandleCreateEntity)
+				full.GET("/entities", s.HandleListEntities)
+				full.DELETE("/entities/:id", s.HandleDeleteEntity)
+				full.POST("/entities/:id/approve", s.HandleApproveConnection)
+				full.GET("/entities/:id/status", s.HandleEntityStatus)
 
-			// Conversations
-			authed.POST("/conversations", s.HandleCreateConversation)
-			authed.GET("/conversations", s.HandleListConversations)
-			authed.GET("/conversations/:id", s.HandleGetConversation)
+				// Webhook management
+				full.POST("/webhooks", s.HandleCreateWebhook)
+				full.GET("/webhooks", s.HandleListWebhooks)
+				full.DELETE("/webhooks/:id", s.HandleDeleteWebhook)
 
-			// Participants
-			authed.POST("/conversations/:id/participants", s.HandleAddParticipant)
-			authed.DELETE("/conversations/:id/participants/:entityId", s.HandleRemoveParticipant)
+				// Conversations
+				full.POST("/conversations", s.HandleCreateConversation)
+				full.GET("/conversations", s.HandleListConversations)
+				full.GET("/conversations/:id", s.HandleGetConversation)
 
-			// Messages
-			authed.POST("/messages/send", s.HandleSendMessage)
-			authed.GET("/conversations/:id/messages", s.HandleListMessages)
+				// Participants
+				full.POST("/conversations/:id/participants", s.HandleAddParticipant)
+				full.DELETE("/conversations/:id/participants/:entityId", s.HandleRemoveParticipant)
+				full.PUT("/conversations/:id/subscription", s.HandleUpdateSubscription)
 
-			// Long polling
-			authed.GET("/updates", s.HandleUpdates)
+				// Messages
+				full.POST("/messages/send", s.HandleSendMessage)
+				full.DELETE("/messages/:id", s.HandleRevokeMessage)
+				full.GET("/conversations/:id/messages", s.HandleListMessages)
+				full.GET("/conversations/:id/search", s.HandleSearchMessages)
+
+				// File upload
+				full.POST("/files/upload", s.HandleFileUpload)
+
+				// Long polling
+				full.GET("/updates", s.HandleUpdates)
+			}
 		}
 
-		// WebSocket (auth via query param)
+		// WebSocket (auth via query param, supports bootstrap keys)
 		v1.GET("/ws", s.HandleWS)
+
+		// Static file serving for uploads
+		if s.FileStore != nil {
+			r.Static("/files", s.FileStore.ServePath())
+		}
 	}
 
 	return r
@@ -83,15 +114,19 @@ func NewRouter(s *Server) *gin.Engine {
 func corsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
-		if origin == "" {
-			origin = "*"
-		}
 
-		c.Header("Access-Control-Allow-Origin", origin)
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
-		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "86400")
+
+		if origin != "" {
+			// Specific origin: allow credentials
+			c.Header("Access-Control-Allow-Origin", origin)
+			c.Header("Access-Control-Allow-Credentials", "true")
+		} else {
+			// No origin: wildcard without credentials
+			c.Header("Access-Control-Allow-Origin", "*")
+		}
 
 		if strings.ToUpper(c.Request.Method) == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)

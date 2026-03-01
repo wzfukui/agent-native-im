@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/sha256"
 	"fmt"
 	"net/http"
@@ -26,6 +27,7 @@ func fail(c *gin.Context, code int, msg string) {
 // EntityAuth is the unified authentication middleware.
 // It first tries JWT (for user sessions), then falls back to API key lookup (for bots/services).
 // On success it sets "entityID" (int64) and "entityType" (model.EntityType) in the Gin context.
+// If authenticated via bootstrap key, it also sets "bootstrapPending" (bool) = true.
 func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := extractBearer(c)
@@ -44,29 +46,36 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 			return
 		}
 
-		// 2. Try API key: prefix lookup + hash comparison
-		if len(tokenStr) >= 8 {
-			prefix := tokenStr[:8]
-			fullHash := fmt.Sprintf("%x", sha256.Sum256([]byte(tokenStr)))
-
-			creds, err := st.GetCredentialByPrefix(c.Request.Context(), model.CredAPIKey, prefix)
+		// 2. Try API key / bootstrap key
+		cred, err := ResolveAPIKey(c.Request.Context(), st, tokenStr)
+		if err == nil {
+			entity, err := st.GetEntityByID(c.Request.Context(), cred.EntityID)
 			if err == nil {
-				for _, cred := range creds {
-					if cred.SecretHash == fullHash {
-						entity, err := st.GetEntityByID(c.Request.Context(), cred.EntityID)
-						if err == nil {
-							c.Set("entityID", entity.ID)
-							c.Set("entityType", entity.EntityType)
-							c.Next()
-							return
-						}
-					}
+				c.Set("entityID", entity.ID)
+				c.Set("entityType", entity.EntityType)
+				if cred.CredType == model.CredBootstrap {
+					c.Set("bootstrapPending", true)
 				}
+				c.Next()
+				return
 			}
 		}
 
 		fail(c, http.StatusUnauthorized, "invalid token")
 		c.Abort()
+	}
+}
+
+// RequireFullAuth blocks requests authenticated with bootstrap keys.
+// Bootstrap keys are only allowed to access /me and /ws.
+func RequireFullAuth() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if IsBootstrap(c) {
+			fail(c, http.StatusForbidden, "bootstrap key cannot access this endpoint; awaiting connection approval")
+			c.Abort()
+			return
+		}
+		c.Next()
 	}
 }
 
@@ -82,4 +91,77 @@ func GetEntityType(c *gin.Context) model.EntityType {
 		return et
 	}
 	return ""
+}
+
+// IsBootstrap returns true if the current request was authenticated with a bootstrap key.
+func IsBootstrap(c *gin.Context) bool {
+	v, exists := c.Get("bootstrapPending")
+	if !exists {
+		return false
+	}
+	b, ok := v.(bool)
+	return ok && b
+}
+
+// RequireAdmin blocks requests from non-admin users.
+// Admin is determined by matching the entity name against the configured admin username.
+func RequireAdmin(st store.Store, adminUser string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if GetEntityType(c) != model.EntityUser {
+			fail(c, http.StatusForbidden, "admin access required")
+			c.Abort()
+			return
+		}
+		entity, err := st.GetEntityByID(c.Request.Context(), GetEntityID(c))
+		if err != nil || entity.Name != adminUser {
+			fail(c, http.StatusForbidden, "admin access required")
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// ResolveAPIKey looks up an entity by API key or bootstrap key (prefix + hash verification).
+// Returns the matching credential on success.
+func ResolveAPIKey(ctx context.Context, st store.Store, apiKey string) (*model.Credential, error) {
+	if len(apiKey) < 8 {
+		return nil, fmt.Errorf("api key too short")
+	}
+	prefix := apiKey[:8]
+	fullHash := fmt.Sprintf("%x", sha256.Sum256([]byte(apiKey)))
+
+	// Determine credential type from key prefix
+	credType := model.CredAPIKey
+	if strings.HasPrefix(apiKey, "aimb_") {
+		credType = model.CredBootstrap
+	}
+
+	creds, err := st.GetCredentialByPrefix(ctx, credType, prefix)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, cred := range creds {
+		if cred.SecretHash == fullHash {
+			return cred, nil
+		}
+	}
+
+	// If not found with detected type, try the other type as fallback (backward compat)
+	if credType == model.CredAPIKey {
+		creds, err = st.GetCredentialByPrefix(ctx, model.CredBootstrap, prefix)
+	} else {
+		creds, err = st.GetCredentialByPrefix(ctx, model.CredAPIKey, prefix)
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, cred := range creds {
+		if cred.SecretHash == fullHash {
+			return cred, nil
+		}
+	}
+
+	return nil, fmt.Errorf("api key not found")
 }

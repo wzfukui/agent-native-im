@@ -14,6 +14,8 @@ const (
 	ContentMarkdown ContentType = "markdown"
 	ContentCode     ContentType = "code"
 	ContentImage    ContentType = "image"
+	ContentAudio    ContentType = "audio"
+	ContentFile     ContentType = "file"
 	ContentArtifact ContentType = "artifact"
 	ContentSystem   ContentType = "system"
 )
@@ -63,6 +65,9 @@ type Message struct {
 	ContentType    ContentType   `bun:"content_type,notnull,default:'text'" json:"content_type"`
 	Layers         MessageLayers `bun:"layers,type:jsonb" json:"layers"`
 	Attachments    []Attachment  `bun:"attachments,type:jsonb" json:"attachments,omitempty"`
+	Mentions       []int64       `bun:"mentions,type:jsonb,default:'[]'" json:"mentions,omitempty"`
+	ReplyTo        *int64        `bun:"reply_to" json:"reply_to,omitempty"`
+	RevokedAt      *time.Time    `bun:"revoked_at" json:"revoked_at,omitempty"`
 	CreatedAt      time.Time     `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`
 
 	// Computed fields (populated by handler, not stored in DB)

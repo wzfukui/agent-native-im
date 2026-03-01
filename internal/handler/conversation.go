@@ -156,6 +156,15 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 		role = model.RoleObserver
 	}
 
+	// Only owner/admin can assign admin role
+	if role == model.RoleAdmin {
+		caller, err := s.Store.GetParticipant(ctx, convID, entityID)
+		if err != nil || (caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin) {
+			Fail(c, http.StatusForbidden, "only owner or admin can assign admin role")
+			return
+		}
+	}
+
 	if err := s.Store.AddParticipant(ctx, &model.Participant{
 		ConversationID: convID,
 		EntityID:       req.EntityID,
@@ -172,7 +181,47 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 	OK(c, http.StatusCreated, "participant added")
 }
 
+// HandleUpdateSubscription updates the caller's subscription mode for a conversation.
+func (s *Server) HandleUpdateSubscription(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req struct {
+		Mode string `json:"mode" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, "mode is required")
+		return
+	}
+
+	mode := model.SubscriptionMode(req.Mode)
+	if mode != model.SubMentionOnly && mode != model.SubSubscribeAll {
+		Fail(c, http.StatusBadRequest, "mode must be mention_only or subscribe_all")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+
+	if err := s.Store.UpdateSubscription(ctx, convID, entityID, mode); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to update subscription")
+		return
+	}
+
+	OK(c, http.StatusOK, gin.H{"mode": mode})
+}
+
 // HandleRemoveParticipant removes an entity from a conversation.
+// Only owner/admin can remove others; any participant can remove themselves.
 func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -189,11 +238,19 @@ func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	// Verify caller is participant
-	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
-	if err != nil || !ok {
+	// Verify caller is participant and get their role
+	caller, err := s.Store.GetParticipant(ctx, convID, entityID)
+	if err != nil || caller == nil {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
 		return
+	}
+
+	// Self-removal is always allowed; removing others requires owner/admin
+	if targetID != entityID {
+		if caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin {
+			Fail(c, http.StatusForbidden, "only owner or admin can remove other participants")
+			return
+		}
 	}
 
 	if err := s.Store.RemoveParticipant(ctx, convID, targetID); err != nil {

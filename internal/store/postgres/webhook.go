@@ -11,6 +11,15 @@ func (s *PGStore) CreateWebhook(ctx context.Context, wh *model.Webhook) error {
 	return err
 }
 
+func (s *PGStore) GetWebhookByID(ctx context.Context, id int64) (*model.Webhook, error) {
+	wh := new(model.Webhook)
+	err := s.DB.NewSelect().Model(wh).Where("id = ?", id).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return wh, nil
+}
+
 func (s *PGStore) ListWebhooksByEntity(ctx context.Context, entityID int64) ([]*model.Webhook, error) {
 	var webhooks []*model.Webhook
 	err := s.DB.NewSelect().Model(&webhooks).

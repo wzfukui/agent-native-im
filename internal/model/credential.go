@@ -9,8 +9,9 @@ import (
 type CredType string
 
 const (
-	CredPassword CredType = "password"
-	CredAPIKey   CredType = "api_key"
+	CredPassword  CredType = "password"
+	CredAPIKey    CredType = "api_key"
+	CredBootstrap CredType = "bootstrap"
 )
 
 type Credential struct {

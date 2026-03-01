@@ -5,6 +5,7 @@ import (
 	"log"
 
 	"github.com/wzfukui/agent-native-im/internal/config"
+	"github.com/wzfukui/agent-native-im/internal/filestore"
 	"github.com/wzfukui/agent-native-im/internal/handler"
 	"github.com/wzfukui/agent-native-im/internal/store/postgres"
 	"github.com/wzfukui/agent-native-im/internal/webhook"
@@ -28,12 +29,18 @@ func main() {
 	hub := ws.NewHub(st)
 	go hub.Run()
 
+	fs, err := filestore.NewLocalStore("data/files", "/files")
+	if err != nil {
+		log.Fatalf("failed to init file store: %v", err)
+	}
+
 	srv := &handler.Server{
-		Config:  cfg,
-		Store:   st,
-		Hub:     hub,
-		Webhook: wh,
-		Auth:    &handler.AuthHelper{Secret: cfg.JWTSecret},
+		Config:    cfg,
+		Store:     st,
+		Hub:       hub,
+		Webhook:   wh,
+		Auth:      &handler.AuthHelper{Secret: cfg.JWTSecret},
+		FileStore: fs,
 	}
 
 	r := handler.NewRouter(srv)
