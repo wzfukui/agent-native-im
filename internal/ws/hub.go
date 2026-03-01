@@ -458,3 +458,43 @@ func (h *Hub) notifyParticipantWaiters(conversationID, senderID int64) {
 		// Don't nil out — let UnregisterWaiter clean up properly
 	}
 }
+
+// HandleTaskCancel processes a task cancellation request from a user.
+func (h *Hub) handleTaskCancel(client *Client, rawData []byte) {
+	var envelope struct {
+		Type string `json:"type"`
+		Data struct {
+			ConversationID int64  `json:"conversation_id"`
+			StreamID       string `json:"stream_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawData, &envelope); err != nil {
+		client.sendError("invalid message format")
+		return
+	}
+
+	payload := envelope.Data
+	if payload.StreamID == "" {
+		client.sendError("stream_id is required")
+		return
+	}
+
+	// Broadcast task.cancel to all clients in the conversation (including bots)
+	h.BroadcastEvent(payload.ConversationID, "task.cancel", map[string]interface{}{
+		"conversation_id": payload.ConversationID,
+		"stream_id":       payload.StreamID,
+		"cancelled_by":    client.entityID,
+	})
+
+	// Confirm cancellation to the sender
+	client.sendJSON(WSMessage{
+		Type: "task.cancelled",
+		Data: map[string]interface{}{
+			"conversation_id": payload.ConversationID,
+			"stream_id":       payload.StreamID,
+		},
+	})
+
+	log.Printf("ws: stream %s in conversation %d cancelled by entity %d",
+		payload.StreamID, payload.ConversationID, client.entityID)
+}

@@ -62,6 +62,8 @@ func (c *Client) ReadPump() {
 		switch msg.Type {
 		case "message.send":
 			c.hub.handleSend(c, data)
+		case "task.cancel":
+			c.hub.handleTaskCancel(c, data)
 		case "ping":
 			c.sendJSON(WSMessage{Type: "pong"})
 		default:
