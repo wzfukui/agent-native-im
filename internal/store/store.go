@@ -39,6 +39,10 @@ func New(dbPath string) (*Store, error) {
 		return nil, fmt.Errorf("create tables: %w", err)
 	}
 
+	if err := s.migrate(context.Background()); err != nil {
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
+
 	return s, nil
 }
 
@@ -51,6 +55,18 @@ func (s *Store) createTables(ctx context.Context) error {
 	}
 	for _, m := range models {
 		if _, err := s.DB.NewCreateTable().Model(m).IfNotExists().Exec(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (s *Store) migrate(ctx context.Context) error {
+	// Add webhook_url column to bots table (idempotent)
+	_, err := s.DB.ExecContext(ctx, "ALTER TABLE bots ADD COLUMN webhook_url TEXT DEFAULT ''")
+	if err != nil {
+		// Ignore "duplicate column" error — column already exists
+		if err.Error() != "duplicate column name: webhook_url" {
 			return err
 		}
 	}

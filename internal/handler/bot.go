@@ -10,7 +10,12 @@ import (
 )
 
 type createBotRequest struct {
-	Name string `json:"name" binding:"required"`
+	Name       string `json:"name" binding:"required"`
+	WebhookURL string `json:"webhook_url"`
+}
+
+type updateBotRequest struct {
+	WebhookURL *string `json:"webhook_url"`
 }
 
 func (s *Server) HandleCreateBot(c *gin.Context) {
@@ -24,10 +29,11 @@ func (s *Server) HandleCreateBot(c *gin.Context) {
 	token := uuid.New().String()
 
 	bot := &model.Bot{
-		OwnerID: userID,
-		Name:    req.Name,
-		Token:   token,
-		Status:  "active",
+		OwnerID:    userID,
+		Name:       req.Name,
+		Token:      token,
+		Status:     "active",
+		WebhookURL: req.WebhookURL,
 	}
 
 	if err := s.Store.CreateBot(c.Request.Context(), bot); err != nil {
@@ -68,6 +74,36 @@ func (s *Server) HandleDeleteBot(c *gin.Context) {
 	}
 
 	OK(c, http.StatusOK, "bot deleted")
+}
+
+func (s *Server) HandleUpdateBot(c *gin.Context) {
+	userID := c.GetInt64("userID")
+	botID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid bot id")
+		return
+	}
+
+	var req updateBotRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if req.WebhookURL != nil {
+		if err := s.Store.UpdateBotWebhookURL(c.Request.Context(), botID, userID, *req.WebhookURL); err != nil {
+			Fail(c, http.StatusInternalServerError, "failed to update bot")
+			return
+		}
+	}
+
+	bot, err := s.Store.GetBotByID(c.Request.Context(), botID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "bot not found")
+		return
+	}
+
+	OK(c, http.StatusOK, bot)
 }
 
 func (s *Server) HandleBotMe(c *gin.Context) {

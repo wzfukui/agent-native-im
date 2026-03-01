@@ -7,6 +7,7 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/config"
 	"github.com/wzfukui/agent-native-im/internal/handler"
 	"github.com/wzfukui/agent-native-im/internal/store"
+	"github.com/wzfukui/agent-native-im/internal/webhook"
 	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
@@ -23,7 +24,8 @@ func main() {
 		log.Fatalf("failed to seed admin: %v", err)
 	}
 
-	hub := ws.NewHub(st)
+	wh := webhook.NewDeliverer(st)
+	hub := ws.NewHub(st, wh)
 	go hub.Run()
 
 	srv := &handler.Server{

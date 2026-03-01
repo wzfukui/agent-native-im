@@ -42,6 +42,15 @@ func (s *Store) GetBotByID(ctx context.Context, id int64) (*model.Bot, error) {
 	return bot, nil
 }
 
+func (s *Store) UpdateBotWebhookURL(ctx context.Context, id, ownerID int64, webhookURL string) error {
+	_, err := s.DB.NewUpdate().Model((*model.Bot)(nil)).
+		Set("webhook_url = ?", webhookURL).
+		Where("id = ?", id).
+		Where("owner_id = ?", ownerID).
+		Exec(ctx)
+	return err
+}
+
 func (s *Store) DeleteBot(ctx context.Context, id, ownerID int64) error {
 	_, err := s.DB.NewUpdate().Model((*model.Bot)(nil)).
 		Set("status = ?", "disabled").

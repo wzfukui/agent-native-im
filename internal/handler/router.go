@@ -44,6 +44,7 @@ func NewRouter(s *Server) *gin.Engine {
 		{
 			userRoutes.POST("/bots", s.HandleCreateBot)
 			userRoutes.GET("/bots", s.HandleListBots)
+			userRoutes.PATCH("/bots/:id", s.HandleUpdateBot)
 			userRoutes.DELETE("/bots/:id", s.HandleDeleteBot)
 		}
 
@@ -101,7 +102,7 @@ func corsMiddleware() gin.HandlerFunc {
 		}
 
 		c.Header("Access-Control-Allow-Origin", origin)
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
 		c.Header("Access-Control-Allow-Credentials", "true")
 		c.Header("Access-Control-Max-Age", "86400")

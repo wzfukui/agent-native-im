@@ -8,10 +8,12 @@ import (
 
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/store"
+	"github.com/wzfukui/agent-native-im/internal/webhook"
 )
 
 type Hub struct {
 	store      *store.Store
+	webhook    *webhook.Deliverer
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
@@ -25,9 +27,10 @@ type Hub struct {
 	waiterMu sync.Mutex
 }
 
-func NewHub(s *store.Store) *Hub {
+func NewHub(s *store.Store, wh *webhook.Deliverer) *Hub {
 	return &Hub{
 		store:       s,
+		webhook:     wh,
 		clients:     make(map[*Client]bool),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
@@ -37,10 +40,12 @@ func NewHub(s *store.Store) *Hub {
 }
 
 func (h *Hub) Run() {
+	log.Println("ws: hub started")
 	for {
 		select {
 		case client := <-h.register:
 			h.clients[client] = true
+			log.Printf("ws: registering %s:%d ...", client.senderType, client.senderID)
 			h.subscribeClient(client)
 			log.Printf("ws: %s:%d connected (total: %d)", client.senderType, client.senderID, len(h.clients))
 
@@ -66,7 +71,7 @@ func (h *Hub) subscribeClient(client *Client) {
 
 	var ids []int64
 	var err error
-	ctx := client.ctx
+	ctx := context.Background()
 
 	if client.senderType == "user" {
 		ids, err = h.store.GetConversationIDsByUser(ctx, client.senderID)
@@ -138,11 +143,15 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 		}
 	}
 
-	// Notify long-polling waiters
+	// Notify long-polling waiters + webhook
 	if msg.SenderType == "user" {
 		conv, err := h.store.GetConversation(context.Background(), msg.ConversationID)
 		if err == nil {
 			h.notifyWaiters(conv.BotID)
+		}
+		// Deliver webhook asynchronously
+		if h.webhook != nil {
+			h.webhook.DeliverAsync(msg)
 		}
 	}
 }
@@ -207,12 +216,12 @@ func (h *Hub) handleSend(client *Client, rawData []byte) {
 		Layers:         payload.Layers,
 	}
 
-	if err := h.store.CreateMessage(client.ctx, msg); err != nil {
+	if err := h.store.CreateMessage(context.Background(), msg); err != nil {
 		client.sendError("failed to save message")
 		return
 	}
 
-	_ = h.store.TouchConversation(client.ctx, payload.ConversationID)
+	_ = h.store.TouchConversation(context.Background(), payload.ConversationID)
 
 	h.BroadcastMessage(msg)
 }
