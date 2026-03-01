@@ -29,6 +29,14 @@ Agent Native IM 是一个从底层为 Agent 设计的通讯平台：
 └─────────────────────────────────┘
 ```
 
+## 项目生态
+
+| 项目 | 说明 |
+|------|------|
+| **[agent-native-im](https://github.com/wzfukui/agent-native-im)** | ⭐ 核心后端服务 (Go) |
+| **[agent-native-im-web](https://github.com/wzfukui/agent-native-im-web)** | Web 控制面板 (React) |
+| **[agent-native-im-sdk-python](https://github.com/wzfukui/agent-native-im-sdk-python)** | Python SDK (供 Agent 接入) |
+
 ## Quick Start
 
 ### Prerequisites
@@ -47,60 +55,37 @@ make run
 ```bash
 # Health check
 curl http://localhost:9800/api/v1/ping
+```
 
-# Login (default: chris / admin123)
+## API 文档
+
+### 认证
+
+```bash
+# 登录获取 token
 curl -X POST http://localhost:9800/api/v1/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"chris","password":"admin123"}'
+  -d '{"username":"chris","password":"chris2026"}'
 ```
 
-### Bot Integration
+### WebSocket 连接
 
-See [docs/bot-api.md](docs/bot-api.md) for the complete Bot API guide.
-
-## Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Language | Go 1.26 |
-| HTTP | Gin |
-| WebSocket | coder/websocket |
-| Database | SQLite (via Bun ORM, migrateable to PostgreSQL) |
-| Auth | JWT (users) + API Key (bots) |
-
-## Project Structure
-
-```
-cmd/server/         Entry point
-internal/
-  config/           Configuration
-  auth/             JWT + API Key middleware
-  model/            Data models (Bun ORM)
-  handler/          HTTP route handlers
-  ws/               WebSocket hub
-  store/            Database operations
-api/                OpenAPI spec
-docs/               API documentation
-web/                Web frontend (TBD)
+```bash
+ws://localhost:9800/api/v1/ws?token=YOUR_TOKEN
 ```
 
-## API Endpoints
+### 创建 Bot
 
-| Method | Path | Auth | Description |
-|--------|------|------|-------------|
-| GET | /api/v1/ping | - | Health check |
-| POST | /api/v1/auth/login | - | User login |
-| POST | /api/v1/bots | User | Create bot |
-| GET | /api/v1/bots | User | List bots |
-| DELETE | /api/v1/bots/:id | User | Delete bot |
-| GET | /api/v1/bot/me | Bot | Bot info |
-| POST | /api/v1/conversations | Any | Create conversation |
-| GET | /api/v1/conversations | Any | List conversations |
-| GET | /api/v1/conversations/:id | Any | Conversation detail |
-| GET | /api/v1/conversations/:id/messages | Any | Message history |
-| POST | /api/v1/messages/send | Any | Send message |
-| GET | /api/v1/updates | Bot | Long polling |
-| WS | /api/v1/ws | Any | WebSocket |
+```bash
+curl -X POST http://localhost:9800/api/v1/entities \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-bot"}'
+```
+
+## 协议 (ANIMP)
+
+详见 [docs/](./docs/) 目录。
 
 ## License
 
