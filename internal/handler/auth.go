@@ -244,3 +244,78 @@ func (s *Server) HandleCreateUser(c *gin.Context) {
 
 	OK(c, http.StatusCreated, entity)
 }
+
+// HandleRegister creates a new user account (public registration).
+func (s *Server) HandleRegister(c *gin.Context) {
+	var req struct {
+		Username    string `json:"username" binding:"required"`
+		Password    string `json:"password" binding:"required"`
+		Email       string `json:"email"`
+		DisplayName string `json:"display_name"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, "username and password required")
+		return
+	}
+
+	if len(req.Password) < 6 {
+		Fail(c, http.StatusBadRequest, "password must be at least 6 characters")
+		return
+	}
+
+	// Check if username already exists
+	existing, err := s.Store.GetEntityByName(c.Request.Context(), req.Username, model.EntityUser)
+	if err == nil && existing != nil {
+		Fail(c, http.StatusConflict, "username already exists")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	displayName := req.DisplayName
+	if displayName == "" {
+		displayName = req.Username
+	}
+
+	entity := &model.Entity{
+		EntityType:  model.EntityUser,
+		Name:        req.Username,
+		DisplayName: displayName,
+		Status:      "active",
+	}
+
+	if err := s.Store.CreateEntity(ctx, entity); err != nil {
+		Fail(c, http.StatusConflict, "username already exists or creation failed")
+		return
+	}
+
+	// Create password credential
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	cred := &model.Credential{
+		EntityID:   entity.ID,
+		CredType:   model.CredPassword,
+		SecretHash: string(hash),
+	}
+
+	if err := s.Store.CreateCredential(ctx, cred); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to create credential")
+		return
+	}
+
+	// Generate token for auto-login
+	token, err := s.Auth.GenerateToken(entity.ID, entity.EntityType)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to generate token")
+		return
+	}
+
+	OK(c, http.StatusCreated, gin.H{
+		"token":  token,
+		"entity": entity,
+	})
+}

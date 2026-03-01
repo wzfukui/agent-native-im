@@ -40,6 +40,7 @@ func NewRouter(s *Server) *gin.Engine {
 		// Public
 		v1.GET("/ping", HandlePing)
 		v1.POST("/auth/login", s.HandleLogin)
+		v1.POST("/auth/register", s.HandleRegister)
 
 		// Authenticated (any entity type, including bootstrap keys)
 		authed := v1.Group("")
