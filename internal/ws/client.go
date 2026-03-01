@@ -16,20 +16,18 @@ const (
 )
 
 type Client struct {
-	hub        *Hub
-	conn       *websocket.Conn
-	senderType string // "user" or "bot"
-	senderID   int64
-	send       chan []byte
+	hub      *Hub
+	conn     *websocket.Conn
+	entityID int64
+	send     chan []byte
 }
 
-func NewClient(hub *Hub, conn *websocket.Conn, senderType string, senderID int64) *Client {
+func NewClient(hub *Hub, conn *websocket.Conn, entityID int64) *Client {
 	return &Client{
-		hub:        hub,
-		conn:       conn,
-		senderType: senderType,
-		senderID:   senderID,
-		send:       make(chan []byte, 256),
+		hub:      hub,
+		conn:     conn,
+		entityID: entityID,
+		send:     make(chan []byte, 256),
 	}
 }
 
@@ -50,7 +48,7 @@ func (c *Client) ReadPump() {
 		_, data, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Printf("ws: client %s:%d read error: %v", c.senderType, c.senderID, err)
+				log.Printf("ws: entity %d read error: %v", c.entityID, err)
 			}
 			return
 		}
@@ -108,7 +106,6 @@ func (c *Client) sendJSON(v interface{}) {
 	select {
 	case c.send <- data:
 	default:
-		// buffer full
 	}
 }
 

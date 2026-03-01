@@ -5,12 +5,15 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
 type sendMessageRequest struct {
 	ConversationID int64               `json:"conversation_id" binding:"required"`
+	ContentType    string              `json:"content_type,omitempty"`
 	Layers         model.MessageLayers `json:"layers"`
+	Attachments    []model.Attachment  `json:"attachments,omitempty"`
 	StreamID       string              `json:"stream_id,omitempty"`
 }
 
@@ -21,44 +24,52 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 		return
 	}
 
-	senderType := c.GetString("senderType")
-	senderID := c.GetInt64("senderID")
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
 
-	// Verify conversation access
-	conv, err := s.Store.GetConversation(c.Request.Context(), req.ConversationID)
-	if err != nil {
-		Fail(c, http.StatusNotFound, "conversation not found")
+	// Verify participant
+	ok, err := s.Store.IsParticipant(ctx, req.ConversationID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
 		return
 	}
 
-	if senderType == "user" && conv.UserID != senderID {
-		Fail(c, http.StatusForbidden, "access denied")
-		return
-	}
-	if senderType == "bot" && conv.BotID != senderID {
-		Fail(c, http.StatusForbidden, "access denied")
-		return
+	contentType := model.ContentType(req.ContentType)
+	if contentType == "" {
+		contentType = model.ContentText
 	}
 
 	msg := &model.Message{
 		ConversationID: req.ConversationID,
+		SenderID:       entityID,
 		StreamID:       req.StreamID,
-		SenderType:     senderType,
-		SenderID:       senderID,
+		ContentType:    contentType,
 		Layers:         req.Layers,
+		Attachments:    req.Attachments,
 	}
 
-	if err := s.Store.CreateMessage(c.Request.Context(), msg); err != nil {
+	if err := s.Store.CreateMessage(ctx, msg); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to save message")
 		return
 	}
 
-	// Update conversation timestamp
-	_ = s.Store.TouchConversation(c.Request.Context(), req.ConversationID)
+	_ = s.Store.TouchConversation(ctx, req.ConversationID)
 
-	// Broadcast via WebSocket hub
+	// Populate sender info
+	sender, err := s.Store.GetEntityByID(ctx, entityID)
+	if err == nil {
+		msg.SenderType = string(sender.EntityType)
+		msg.Sender = sender
+	}
+
+	// Broadcast via WebSocket
 	if s.Hub != nil {
 		s.Hub.BroadcastMessage(msg)
+	}
+
+	// Deliver webhooks
+	if s.Webhook != nil {
+		s.Webhook.DeliverAsync(msg)
 	}
 
 	OK(c, http.StatusCreated, msg)
@@ -71,31 +82,39 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 		return
 	}
 
-	// Verify access
-	conv, err := s.Store.GetConversation(c.Request.Context(), convID)
-	if err != nil {
-		Fail(c, http.StatusNotFound, "conversation not found")
-		return
-	}
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
 
-	senderType := c.GetString("senderType")
-	senderID := c.GetInt64("senderID")
-	if senderType == "user" && conv.UserID != senderID {
-		Fail(c, http.StatusForbidden, "access denied")
-		return
-	}
-	if senderType == "bot" && conv.BotID != senderID {
-		Fail(c, http.StatusForbidden, "access denied")
+	// Verify participant
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
 		return
 	}
 
 	before, _ := strconv.ParseInt(c.DefaultQuery("before", "0"), 10, 64)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 
-	msgs, err := s.Store.ListMessages(c.Request.Context(), convID, before, limit)
+	msgs, err := s.Store.ListMessages(ctx, convID, before, limit)
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to list messages")
 		return
+	}
+
+	// Populate sender info for each message
+	entityCache := make(map[int64]*model.Entity)
+	for _, msg := range msgs {
+		sender, ok := entityCache[msg.SenderID]
+		if !ok {
+			sender, err = s.Store.GetEntityByID(ctx, msg.SenderID)
+			if err == nil {
+				entityCache[msg.SenderID] = sender
+			}
+		}
+		if sender != nil {
+			msg.SenderType = string(sender.EntityType)
+			msg.Sender = sender
+		}
 	}
 
 	hasMore := len(msgs) == limit

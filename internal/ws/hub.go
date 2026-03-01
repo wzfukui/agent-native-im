@@ -8,12 +8,10 @@ import (
 
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/store"
-	"github.com/wzfukui/agent-native-im/internal/webhook"
 )
 
 type Hub struct {
-	store      *store.Store
-	webhook    *webhook.Deliverer
+	store      store.Store
 	clients    map[*Client]bool
 	register   chan *Client
 	unregister chan *Client
@@ -22,15 +20,14 @@ type Hub struct {
 	convClients map[int64]map[*Client]bool
 	mu          sync.RWMutex
 
-	// Long polling waiters: botID -> channels
+	// Long polling waiters: entityID -> channels
 	waiters  map[int64][]chan struct{}
 	waiterMu sync.Mutex
 }
 
-func NewHub(s *store.Store, wh *webhook.Deliverer) *Hub {
+func NewHub(st store.Store) *Hub {
 	return &Hub{
-		store:       s,
-		webhook:     wh,
+		store:       st,
 		clients:     make(map[*Client]bool),
 		register:    make(chan *Client),
 		unregister:  make(chan *Client),
@@ -45,22 +42,20 @@ func (h *Hub) Run() {
 		select {
 		case client := <-h.register:
 			h.clients[client] = true
-			log.Printf("ws: registering %s:%d ...", client.senderType, client.senderID)
 			h.subscribeClient(client)
-			log.Printf("ws: %s:%d connected (total: %d)", client.senderType, client.senderID, len(h.clients))
+			log.Printf("ws: entity %d connected (total: %d)", client.entityID, len(h.clients))
 
 		case client := <-h.unregister:
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
 				h.unsubscribeClient(client)
-				log.Printf("ws: %s:%d disconnected (total: %d)", client.senderType, client.senderID, len(h.clients))
+				log.Printf("ws: entity %d disconnected (total: %d)", client.entityID, len(h.clients))
 			}
 		}
 	}
 }
 
-// Register adds a client to the hub.
 func (h *Hub) Register(client *Client) {
 	h.register <- client
 }
@@ -69,17 +64,10 @@ func (h *Hub) subscribeClient(client *Client) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	var ids []int64
-	var err error
 	ctx := context.Background()
-
-	if client.senderType == "user" {
-		ids, err = h.store.GetConversationIDsByUser(ctx, client.senderID)
-	} else {
-		ids, err = h.store.GetConversationIDsByBot(ctx, client.senderID)
-	}
+	ids, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
 	if err != nil {
-		log.Printf("ws: failed to get conversations for %s:%d: %v", client.senderType, client.senderID, err)
+		log.Printf("ws: failed to get conversations for entity %d: %v", client.entityID, err)
 		return
 	}
 
@@ -103,8 +91,8 @@ func (h *Hub) unsubscribeClient(client *Client) {
 	}
 }
 
-// NotifyNewConversation adds connected clients to a new conversation's subscription.
-func (h *Hub) NotifyNewConversation(convID, userID, botID int64) {
+// NotifyNewConversation subscribes connected participants to a new conversation.
+func (h *Hub) NotifyNewConversation(convID int64, entityIDs ...int64) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
@@ -113,9 +101,10 @@ func (h *Hub) NotifyNewConversation(convID, userID, botID int64) {
 	}
 
 	for client := range h.clients {
-		if (client.senderType == "user" && client.senderID == userID) ||
-			(client.senderType == "bot" && client.senderID == botID) {
-			h.convClients[convID][client] = true
+		for _, eid := range entityIDs {
+			if client.entityID == eid {
+				h.convClients[convID][client] = true
+			}
 		}
 	}
 }
@@ -139,21 +128,11 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 		select {
 		case client.send <- data:
 		default:
-			// buffer full, skip
 		}
 	}
 
-	// Notify long-polling waiters + webhook
-	if msg.SenderType == "user" {
-		conv, err := h.store.GetConversation(context.Background(), msg.ConversationID)
-		if err == nil {
-			h.notifyWaiters(conv.BotID)
-		}
-		// Deliver webhook asynchronously
-		if h.webhook != nil {
-			h.webhook.DeliverAsync(msg)
-		}
-	}
+	// Notify long-polling waiters for all participants except the sender
+	h.notifyParticipantWaiters(msg.ConversationID, msg.SenderID)
 }
 
 // BroadcastStream sends an ephemeral stream message (not persisted).
@@ -194,68 +173,94 @@ func (h *Hub) handleSend(client *Client, rawData []byte) {
 
 	payload := envelope.Data
 
-	// Handle stream messages
+	// Verify participant
+	ctx := context.Background()
+	ok, err := h.store.IsParticipant(ctx, payload.ConversationID, client.entityID)
+	if err != nil || !ok {
+		client.sendError("not a participant of this conversation")
+		return
+	}
+
+	// Handle stream messages (ephemeral)
 	if payload.StreamType == "start" || payload.StreamType == "delta" {
-		// Ephemeral: broadcast but don't persist
 		h.BroadcastStream(payload.ConversationID, payload.StreamType, map[string]interface{}{
 			"conversation_id": payload.ConversationID,
 			"stream_id":       payload.StreamID,
-			"sender_type":     client.senderType,
-			"sender_id":       client.senderID,
+			"sender_id":       client.entityID,
 			"layers":          payload.Layers,
 		}, client)
 		return
 	}
 
 	// Persist message (normal send or stream_end)
-	msg := &model.Message{
-		ConversationID: payload.ConversationID,
-		StreamID:       payload.StreamID,
-		SenderType:     client.senderType,
-		SenderID:       client.senderID,
-		Layers:         payload.Layers,
+	contentType := payload.ContentType
+	if contentType == "" {
+		contentType = model.ContentText
 	}
 
-	if err := h.store.CreateMessage(context.Background(), msg); err != nil {
+	msg := &model.Message{
+		ConversationID: payload.ConversationID,
+		SenderID:       client.entityID,
+		StreamID:       payload.StreamID,
+		ContentType:    contentType,
+		Layers:         payload.Layers,
+		Attachments:    payload.Attachments,
+	}
+
+	if err := h.store.CreateMessage(ctx, msg); err != nil {
 		client.sendError("failed to save message")
 		return
 	}
 
-	_ = h.store.TouchConversation(context.Background(), payload.ConversationID)
+	_ = h.store.TouchConversation(ctx, payload.ConversationID)
 
 	h.BroadcastMessage(msg)
 }
 
 // Long polling support
 
-func (h *Hub) RegisterWaiter(botID int64) chan struct{} {
+func (h *Hub) RegisterWaiter(entityID int64) chan struct{} {
 	h.waiterMu.Lock()
 	defer h.waiterMu.Unlock()
 	ch := make(chan struct{}, 1)
-	h.waiters[botID] = append(h.waiters[botID], ch)
+	h.waiters[entityID] = append(h.waiters[entityID], ch)
 	return ch
 }
 
-func (h *Hub) UnregisterWaiter(botID int64, ch chan struct{}) {
+func (h *Hub) UnregisterWaiter(entityID int64, ch chan struct{}) {
 	h.waiterMu.Lock()
 	defer h.waiterMu.Unlock()
-	waiters := h.waiters[botID]
+	waiters := h.waiters[entityID]
 	for i, w := range waiters {
 		if w == ch {
-			h.waiters[botID] = append(waiters[:i], waiters[i+1:]...)
+			h.waiters[entityID] = append(waiters[:i], waiters[i+1:]...)
 			break
 		}
 	}
 }
 
-func (h *Hub) notifyWaiters(botID int64) {
+// notifyParticipantWaiters notifies long-polling waiters for all participants
+// of a conversation except the sender.
+func (h *Hub) notifyParticipantWaiters(conversationID, senderID int64) {
+	ctx := context.Background()
+	participants, err := h.store.ListParticipants(ctx, conversationID)
+	if err != nil {
+		return
+	}
+
 	h.waiterMu.Lock()
 	defer h.waiterMu.Unlock()
-	for _, ch := range h.waiters[botID] {
-		select {
-		case ch <- struct{}{}:
-		default:
+
+	for _, p := range participants {
+		if p.EntityID == senderID {
+			continue
 		}
+		for _, ch := range h.waiters[p.EntityID] {
+			select {
+			case ch <- struct{}{}:
+			default:
+			}
+		}
+		h.waiters[p.EntityID] = nil
 	}
-	h.waiters[botID] = nil
 }

@@ -18,72 +18,69 @@ import (
 
 // Deliverer handles async webhook delivery with retry.
 type Deliverer struct {
-	store  *store.Store
+	store  store.Store
 	client *http.Client
 }
 
 // NewDeliverer creates a webhook deliverer.
-func NewDeliverer(s *store.Store) *Deliverer {
+func NewDeliverer(st store.Store) *Deliverer {
 	return &Deliverer{
-		store: s,
+		store: st,
 		client: &http.Client{
 			Timeout: 10 * time.Second,
 		},
 	}
 }
 
-// DeliverAsync sends a webhook in a goroutine with retries.
-// Only call this for user-sent messages (msg.SenderType == "user").
+// DeliverAsync sends webhooks for a message to all relevant subscribers.
 func (d *Deliverer) DeliverAsync(msg *model.Message) {
 	go func() {
 		ctx := context.Background()
 
-		// Look up the bot for this conversation
-		conv, err := d.store.GetConversation(ctx, msg.ConversationID)
+		webhooks, err := d.store.GetWebhooksForConversation(ctx, msg.ConversationID, "message.new")
 		if err != nil {
-			log.Printf("webhook: failed to get conversation %d: %v", msg.ConversationID, err)
+			log.Printf("webhook: failed to get webhooks for conversation %d: %v", msg.ConversationID, err)
 			return
 		}
 
-		bot, err := d.store.GetBotByID(ctx, conv.BotID)
-		if err != nil {
-			log.Printf("webhook: failed to get bot %d: %v", conv.BotID, err)
-			return
-		}
-
-		if bot.WebhookURL == "" {
-			return // no webhook configured
-		}
-
-		body, err := json.Marshal(msg)
-		if err != nil {
-			log.Printf("webhook: failed to marshal message: %v", err)
-			return
-		}
-
-		// Sign with HMAC-SHA256 using bot token as key
-		signature := sign(body, bot.Token)
-
-		// Retry schedule: 0s, 5s, 25s
-		delays := []time.Duration{0, 5 * time.Second, 25 * time.Second}
-		for attempt, delay := range delays {
-			if delay > 0 {
-				time.Sleep(delay)
+		for _, wh := range webhooks {
+			// Don't deliver to the sender's own webhook
+			if wh.EntityID == msg.SenderID {
+				continue
 			}
-
-			err = d.deliver(bot.WebhookURL, body, signature, bot.ID)
-			if err == nil {
-				log.Printf("webhook: delivered to bot %d (attempt %d)", bot.ID, attempt+1)
-				return
-			}
-			log.Printf("webhook: attempt %d failed for bot %d: %v", attempt+1, bot.ID, err)
+			d.deliverToWebhook(wh, msg)
 		}
-
-		log.Printf("webhook: all retries exhausted for bot %d", bot.ID)
 	}()
 }
 
-func (d *Deliverer) deliver(url string, body []byte, signature string, botID int64) error {
+func (d *Deliverer) deliverToWebhook(wh *model.Webhook, msg *model.Message) {
+	body, err := json.Marshal(msg)
+	if err != nil {
+		log.Printf("webhook: failed to marshal message: %v", err)
+		return
+	}
+
+	signature := sign(body, wh.Secret)
+
+	// Retry schedule: 0s, 5s, 25s
+	delays := []time.Duration{0, 5 * time.Second, 25 * time.Second}
+	for attempt, delay := range delays {
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+
+		err = d.deliver(wh.URL, body, signature, wh.EntityID)
+		if err == nil {
+			log.Printf("webhook: delivered to entity %d (attempt %d)", wh.EntityID, attempt+1)
+			return
+		}
+		log.Printf("webhook: attempt %d failed for entity %d: %v", attempt+1, wh.EntityID, err)
+	}
+
+	log.Printf("webhook: all retries exhausted for entity %d", wh.EntityID)
+}
+
+func (d *Deliverer) deliver(url string, body []byte, signature string, entityID int64) error {
 	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
@@ -91,7 +88,7 @@ func (d *Deliverer) deliver(url string, body []byte, signature string, botID int
 
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Signature", "sha256="+signature)
-	req.Header.Set("X-Bot-ID", fmt.Sprintf("%d", botID))
+	req.Header.Set("X-Entity-ID", fmt.Sprintf("%d", entityID))
 
 	resp, err := d.client.Do(req)
 	if err != nil {

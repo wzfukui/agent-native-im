@@ -4,18 +4,19 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
 type Claims struct {
-	UserID   int64  `json:"user_id"`
-	Username string `json:"username"`
+	EntityID   int64            `json:"entity_id"`
+	EntityType model.EntityType `json:"entity_type"`
 	jwt.RegisteredClaims
 }
 
-func GenerateToken(secret string, userID int64, username string) (string, error) {
+func GenerateToken(secret string, entityID int64, entityType model.EntityType) (string, error) {
 	claims := Claims{
-		UserID:   userID,
-		Username: username,
+		EntityID:   entityID,
+		EntityType: entityType,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

@@ -2,14 +2,14 @@ package handler
 
 import (
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/config"
+	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/store"
+	"github.com/wzfukui/agent-native-im/internal/webhook"
 	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
@@ -17,15 +17,16 @@ type AuthHelper struct {
 	Secret string
 }
 
-func (a *AuthHelper) GenerateToken(userID int64, username string) (string, error) {
-	return auth.GenerateToken(a.Secret, userID, username)
+func (a *AuthHelper) GenerateToken(entityID int64, entityType model.EntityType) (string, error) {
+	return auth.GenerateToken(a.Secret, entityID, entityType)
 }
 
 type Server struct {
-	Config *config.Config
-	Store  *store.Store
-	Hub    *ws.Hub
-	Auth   *AuthHelper
+	Config  *config.Config
+	Store   store.Store
+	Hub     *ws.Hub
+	Webhook *webhook.Deliverer
+	Auth    *AuthHelper
 }
 
 func NewRouter(s *Server) *gin.Engine {
@@ -38,57 +39,42 @@ func NewRouter(s *Server) *gin.Engine {
 		v1.GET("/ping", HandlePing)
 		v1.POST("/auth/login", s.HandleLogin)
 
-		// User-authenticated
-		userRoutes := v1.Group("")
-		userRoutes.Use(auth.UserAuth(s.Config.JWTSecret))
+		// Authenticated (any entity type)
+		authed := v1.Group("")
+		authed.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
 		{
-			userRoutes.POST("/bots", s.HandleCreateBot)
-			userRoutes.GET("/bots", s.HandleListBots)
-			userRoutes.PATCH("/bots/:id", s.HandleUpdateBot)
-			userRoutes.DELETE("/bots/:id", s.HandleDeleteBot)
-		}
+			// Entity self-info
+			authed.GET("/me", s.HandleMe)
 
-		// Any-authenticated (user or bot)
-		anyRoutes := v1.Group("")
-		anyRoutes.Use(auth.AnyAuth(s.Config.JWTSecret, s.Store))
-		{
-			anyRoutes.GET("/conversations", s.HandleListConversations)
-			anyRoutes.POST("/conversations", s.HandleCreateConversation)
-			anyRoutes.GET("/conversations/:id", s.HandleGetConversation)
-			anyRoutes.GET("/conversations/:id/messages", s.HandleListMessages)
-			anyRoutes.POST("/messages/send", s.HandleSendMessage)
-		}
+			// Entity management (user-only at handler level)
+			authed.POST("/entities", s.HandleCreateEntity)
+			authed.GET("/entities", s.HandleListEntities)
+			authed.DELETE("/entities/:id", s.HandleDeleteEntity)
 
-		// Bot-authenticated
-		botRoutes := v1.Group("")
-		botRoutes.Use(auth.BotAuth(s.Store))
-		{
-			botRoutes.GET("/bot/me", s.HandleBotMe)
-			botRoutes.GET("/updates", s.HandleUpdates)
+			// Webhook management
+			authed.POST("/webhooks", s.HandleCreateWebhook)
+			authed.GET("/webhooks", s.HandleListWebhooks)
+			authed.DELETE("/webhooks/:id", s.HandleDeleteWebhook)
+
+			// Conversations
+			authed.POST("/conversations", s.HandleCreateConversation)
+			authed.GET("/conversations", s.HandleListConversations)
+			authed.GET("/conversations/:id", s.HandleGetConversation)
+
+			// Participants
+			authed.POST("/conversations/:id/participants", s.HandleAddParticipant)
+			authed.DELETE("/conversations/:id/participants/:entityId", s.HandleRemoveParticipant)
+
+			// Messages
+			authed.POST("/messages/send", s.HandleSendMessage)
+			authed.GET("/conversations/:id/messages", s.HandleListMessages)
+
+			// Long polling
+			authed.GET("/updates", s.HandleUpdates)
 		}
 
 		// WebSocket (auth via query param)
 		v1.GET("/ws", s.HandleWS)
-	}
-
-	// Serve web frontend from web/dist/ if it exists (SPA fallback)
-	distPath := filepath.Join("web", "dist")
-	if info, err := os.Stat(distPath); err == nil && info.IsDir() {
-		r.NoRoute(func(c *gin.Context) {
-			// Don't serve SPA for API paths
-			if strings.HasPrefix(c.Request.URL.Path, "/api/") {
-				c.JSON(http.StatusNotFound, gin.H{"ok": false, "error": "not found"})
-				return
-			}
-			// Try to serve static file
-			filePath := filepath.Join(distPath, c.Request.URL.Path)
-			if info, err := os.Stat(filePath); err == nil && !info.IsDir() {
-				c.File(filePath)
-				return
-			}
-			// SPA fallback: serve index.html
-			c.File(filepath.Join(distPath, "index.html"))
-		})
 	}
 
 	return r

@@ -1,10 +1,13 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/store"
 )
 
@@ -20,51 +23,10 @@ func fail(c *gin.Context, code int, msg string) {
 	c.JSON(code, gin.H{"ok": false, "error": msg})
 }
 
-func UserAuth(secret string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		tokenStr := extractBearer(c)
-		if tokenStr == "" {
-			fail(c, http.StatusUnauthorized, "missing authorization")
-			c.Abort()
-			return
-		}
-		claims, err := ParseToken(secret, tokenStr)
-		if err != nil {
-			fail(c, http.StatusUnauthorized, "invalid token")
-			c.Abort()
-			return
-		}
-		c.Set("userID", claims.UserID)
-		c.Set("username", claims.Username)
-		c.Set("senderType", "user")
-		c.Set("senderID", claims.UserID)
-		c.Next()
-	}
-}
-
-func BotAuth(s *store.Store) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		tokenStr := extractBearer(c)
-		if tokenStr == "" {
-			fail(c, http.StatusUnauthorized, "missing authorization")
-			c.Abort()
-			return
-		}
-		bot, err := s.GetBotByToken(c.Request.Context(), tokenStr)
-		if err != nil {
-			fail(c, http.StatusUnauthorized, "invalid bot token")
-			c.Abort()
-			return
-		}
-		c.Set("botID", bot.ID)
-		c.Set("ownerID", bot.OwnerID)
-		c.Set("senderType", "bot")
-		c.Set("senderID", bot.ID)
-		c.Next()
-	}
-}
-
-func AnyAuth(secret string, s *store.Store) gin.HandlerFunc {
+// EntityAuth is the unified authentication middleware.
+// It first tries JWT (for user sessions), then falls back to API key lookup (for bots/services).
+// On success it sets "entityID" (int64) and "entityType" (model.EntityType) in the Gin context.
+func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := extractBearer(c)
 		if tokenStr == "" {
@@ -73,28 +35,51 @@ func AnyAuth(secret string, s *store.Store) gin.HandlerFunc {
 			return
 		}
 
-		// Try JWT first
+		// 1. Try JWT
 		claims, err := ParseToken(secret, tokenStr)
 		if err == nil {
-			c.Set("userID", claims.UserID)
-			c.Set("username", claims.Username)
-			c.Set("senderType", "user")
-			c.Set("senderID", claims.UserID)
+			c.Set("entityID", claims.EntityID)
+			c.Set("entityType", claims.EntityType)
 			c.Next()
 			return
 		}
 
-		// Try bot token
-		bot, err := s.GetBotByToken(c.Request.Context(), tokenStr)
-		if err != nil {
-			fail(c, http.StatusUnauthorized, "invalid token")
-			c.Abort()
-			return
+		// 2. Try API key: prefix lookup + hash comparison
+		if len(tokenStr) >= 8 {
+			prefix := tokenStr[:8]
+			fullHash := fmt.Sprintf("%x", sha256.Sum256([]byte(tokenStr)))
+
+			creds, err := st.GetCredentialByPrefix(c.Request.Context(), model.CredAPIKey, prefix)
+			if err == nil {
+				for _, cred := range creds {
+					if cred.SecretHash == fullHash {
+						entity, err := st.GetEntityByID(c.Request.Context(), cred.EntityID)
+						if err == nil {
+							c.Set("entityID", entity.ID)
+							c.Set("entityType", entity.EntityType)
+							c.Next()
+							return
+						}
+					}
+				}
+			}
 		}
-		c.Set("botID", bot.ID)
-		c.Set("ownerID", bot.OwnerID)
-		c.Set("senderType", "bot")
-		c.Set("senderID", bot.ID)
-		c.Next()
+
+		fail(c, http.StatusUnauthorized, "invalid token")
+		c.Abort()
 	}
+}
+
+// GetEntityID extracts the authenticated entity ID from context.
+func GetEntityID(c *gin.Context) int64 {
+	return c.GetInt64("entityID")
+}
+
+// GetEntityType extracts the authenticated entity type from context.
+func GetEntityType(c *gin.Context) model.EntityType {
+	v, _ := c.Get("entityType")
+	if et, ok := v.(model.EntityType); ok {
+		return et
+	}
+	return ""
 }

@@ -2,77 +2,62 @@ package store
 
 import (
 	"context"
-	"database/sql"
-	"fmt"
-	"os"
-	"path/filepath"
+	"io"
 
-	"github.com/uptrace/bun"
-	"github.com/uptrace/bun/dialect/sqlitedialect"
-	"github.com/uptrace/bun/driver/sqliteshim"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
-type Store struct {
-	DB *bun.DB
+// Store composes all sub-store interfaces.
+type Store interface {
+	EntityStore
+	CredentialStore
+	ConversationStore
+	ParticipantStore
+	MessageStore
+	WebhookStore
+	io.Closer
 }
 
-func New(dbPath string) (*Store, error) {
-	dir := filepath.Dir(dbPath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return nil, fmt.Errorf("create db dir: %w", err)
-	}
-
-	dsn := fmt.Sprintf("file:%s?cache=shared&_journal_mode=WAL", dbPath)
-	sqldb, err := sql.Open(sqliteshim.ShimName, dsn)
-	if err != nil {
-		return nil, fmt.Errorf("open db: %w", err)
-	}
-
-	sqldb.SetMaxOpenConns(1)
-	sqldb.SetMaxIdleConns(2)
-
-	db := bun.NewDB(sqldb, sqlitedialect.New())
-	s := &Store{DB: db}
-
-	if err := s.createTables(context.Background()); err != nil {
-		return nil, fmt.Errorf("create tables: %w", err)
-	}
-
-	if err := s.migrate(context.Background()); err != nil {
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-
-	return s, nil
+type EntityStore interface {
+	CreateEntity(ctx context.Context, entity *model.Entity) error
+	GetEntityByID(ctx context.Context, id int64) (*model.Entity, error)
+	GetEntityByName(ctx context.Context, name string, entityType model.EntityType) (*model.Entity, error)
+	ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*model.Entity, error)
+	UpdateEntity(ctx context.Context, entity *model.Entity) error
+	DeleteEntity(ctx context.Context, id int64) error
 }
 
-func (s *Store) createTables(ctx context.Context) error {
-	models := []interface{}{
-		(*model.User)(nil),
-		(*model.Bot)(nil),
-		(*model.Conversation)(nil),
-		(*model.Message)(nil),
-	}
-	for _, m := range models {
-		if _, err := s.DB.NewCreateTable().Model(m).IfNotExists().Exec(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
+type CredentialStore interface {
+	CreateCredential(ctx context.Context, cred *model.Credential) error
+	GetCredentialsByEntity(ctx context.Context, entityID int64, credType model.CredType) ([]*model.Credential, error)
+	GetCredentialByPrefix(ctx context.Context, credType model.CredType, prefix string) ([]*model.Credential, error)
+	DeleteCredentialsByEntity(ctx context.Context, entityID int64) error
 }
 
-func (s *Store) migrate(ctx context.Context) error {
-	// Add webhook_url column to bots table (idempotent)
-	_, err := s.DB.ExecContext(ctx, "ALTER TABLE bots ADD COLUMN webhook_url TEXT DEFAULT ''")
-	if err != nil {
-		// Ignore "duplicate column" error — column already exists
-		if err.Error() != "duplicate column name: webhook_url" {
-			return err
-		}
-	}
-	return nil
+type ConversationStore interface {
+	CreateConversation(ctx context.Context, conv *model.Conversation) error
+	GetConversation(ctx context.Context, id int64) (*model.Conversation, error)
+	ListConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error)
+	TouchConversation(ctx context.Context, id int64) error
 }
 
-func (s *Store) Close() error {
-	return s.DB.Close()
+type ParticipantStore interface {
+	AddParticipant(ctx context.Context, p *model.Participant) error
+	RemoveParticipant(ctx context.Context, conversationID, entityID int64) error
+	ListParticipants(ctx context.Context, conversationID int64) ([]*model.Participant, error)
+	IsParticipant(ctx context.Context, conversationID, entityID int64) (bool, error)
+	GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error)
+}
+
+type MessageStore interface {
+	CreateMessage(ctx context.Context, msg *model.Message) error
+	ListMessages(ctx context.Context, conversationID int64, before int64, limit int) ([]*model.Message, error)
+	GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error)
+}
+
+type WebhookStore interface {
+	CreateWebhook(ctx context.Context, wh *model.Webhook) error
+	ListWebhooksByEntity(ctx context.Context, entityID int64) ([]*model.Webhook, error)
+	GetWebhooksForConversation(ctx context.Context, conversationID int64, event string) ([]*model.Webhook, error)
+	DeleteWebhook(ctx context.Context, id int64) error
 }

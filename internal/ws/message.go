@@ -14,7 +14,7 @@ type WSMessage struct {
 //
 // Outbound types (server -> client):
 //   message.new    - new message delivered
-//   stream.start   - bot started streaming
+//   stream.start   - streaming started
 //   stream.delta   - streaming chunk
 //   stream.end     - streaming complete
 //   pong           - keepalive response
@@ -24,5 +24,7 @@ type SendPayload struct {
 	ConversationID int64               `json:"conversation_id"`
 	StreamID       string              `json:"stream_id,omitempty"`
 	StreamType     string              `json:"stream_type,omitempty"` // start, delta, end
+	ContentType    model.ContentType   `json:"content_type,omitempty"`
 	Layers         model.MessageLayers `json:"layers"`
+	Attachments    []model.Attachment  `json:"attachments,omitempty"`
 }

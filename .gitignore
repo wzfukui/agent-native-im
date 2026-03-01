@@ -34,4 +34,4 @@ data/
 # Test
 *.test
 *.out
-server
+/server

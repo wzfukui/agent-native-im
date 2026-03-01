@@ -6,10 +6,11 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wzfukui/agent-native-im/internal/auth"
 )
 
 func (s *Server) HandleUpdates(c *gin.Context) {
-	botID := c.GetInt64("botID")
+	entityID := auth.GetEntityID(c)
 	offset, _ := strconv.ParseInt(c.DefaultQuery("offset", "0"), 10, 64)
 	timeout, _ := strconv.Atoi(c.DefaultQuery("timeout", "30"))
 	if timeout > 60 {
@@ -22,7 +23,7 @@ func (s *Server) HandleUpdates(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	// Check for existing messages first
-	msgs, err := s.Store.GetUpdatesForBot(ctx, botID, offset)
+	msgs, err := s.Store.GetUpdatesForEntity(ctx, entityID, offset)
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to get updates")
 		return
@@ -33,12 +34,12 @@ func (s *Server) HandleUpdates(c *gin.Context) {
 	}
 
 	// No messages yet, wait
-	ch := s.Hub.RegisterWaiter(botID)
-	defer s.Hub.UnregisterWaiter(botID, ch)
+	ch := s.Hub.RegisterWaiter(entityID)
+	defer s.Hub.UnregisterWaiter(entityID, ch)
 
 	select {
 	case <-ch:
-		msgs, err = s.Store.GetUpdatesForBot(ctx, botID, offset)
+		msgs, err = s.Store.GetUpdatesForEntity(ctx, entityID, offset)
 		if err != nil {
 			Fail(c, http.StatusInternalServerError, "failed to get updates")
 			return

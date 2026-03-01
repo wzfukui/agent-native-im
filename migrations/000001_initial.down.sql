@@ -1,0 +1,6 @@
+DROP TABLE IF EXISTS webhooks;
+DROP TABLE IF EXISTS messages;
+DROP TABLE IF EXISTS participants;
+DROP TABLE IF EXISTS conversations;
+DROP TABLE IF EXISTS credentials;
+DROP TABLE IF EXISTS entities;
