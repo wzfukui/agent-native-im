@@ -27,6 +27,9 @@ func (s *Store) ListMessages(ctx context.Context, convID int64, before int64, li
 	}
 
 	err := q.Scan(ctx)
+	if msgs == nil {
+		msgs = []model.Message{}
+	}
 	return msgs, err
 }
 

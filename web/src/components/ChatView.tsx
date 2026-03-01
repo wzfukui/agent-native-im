@@ -23,11 +23,15 @@ export default function ChatView({ conversation, realtimeMessages, streamingMess
       setMessages([])
       return
     }
+    setMessages([])
+    setHasMore(false)
     setLoading(true)
     api.getMessages(conversation.id).then(res => {
       // API returns newest-first, we display oldest-first
-      setMessages(res.messages.reverse())
+      setMessages((res.messages ?? []).reverse())
       setHasMore(res.has_more)
+      setLoading(false)
+    }).catch(() => {
       setLoading(false)
     })
   }, [conversation?.id])

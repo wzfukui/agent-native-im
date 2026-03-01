@@ -34,3 +34,4 @@ data/
 # Test
 *.test
 *.out
+server

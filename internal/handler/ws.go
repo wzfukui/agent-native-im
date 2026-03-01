@@ -1,13 +1,20 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 
-	"github.com/coder/websocket"
 	"github.com/gin-gonic/gin"
+	gorillaWs "github.com/gorilla/websocket"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	ws_pkg "github.com/wzfukui/agent-native-im/internal/ws"
 )
+
+var upgrader = gorillaWs.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // MVP: accept any origin
+	},
+}
 
 func (s *Server) HandleWS(c *gin.Context) {
 	token := c.Query("token")
@@ -35,10 +42,9 @@ func (s *Server) HandleWS(c *gin.Context) {
 		senderID = bot.ID
 	}
 
-	conn, err := websocket.Accept(c.Writer, c.Request, &websocket.AcceptOptions{
-		InsecureSkipVerify: true, // MVP: accept any origin
-	})
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		log.Printf("ws: upgrade error for %s:%d: %v", senderType, senderID, err)
 		return
 	}
 

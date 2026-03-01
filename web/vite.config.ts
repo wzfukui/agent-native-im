@@ -6,11 +6,12 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
-      '/api': 'http://localhost:9800',
+      // WebSocket must come before /api to match first
       '/api/v1/ws': {
-        target: 'ws://localhost:9800',
+        target: 'http://localhost:9800',
         ws: true,
       },
+      '/api': 'http://localhost:9800',
     },
   },
 })

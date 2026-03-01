@@ -1,0 +1,21 @@
+{
+  "name": "im-bridge",
+  "version": "1.0.0",
+  "description": "Bridge connecting Pi-Mono AI agent to Agent-Native IM server",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx src/main.ts",
+    "build": "tsc",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "openai": "^4.28.0",
+    "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/ws": "^8.5.10",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.0"
+  }
+}

@@ -1,12 +1,11 @@
 package ws
 
 import (
-	"context"
 	"encoding/json"
 	"log"
 	"time"
 
-	"github.com/coder/websocket"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -22,37 +21,36 @@ type Client struct {
 	senderType string // "user" or "bot"
 	senderID   int64
 	send       chan []byte
-	ctx        context.Context
-	cancel     context.CancelFunc
 }
 
 func NewClient(hub *Hub, conn *websocket.Conn, senderType string, senderID int64) *Client {
-	ctx, cancel := context.WithCancel(context.Background())
 	return &Client{
 		hub:        hub,
 		conn:       conn,
 		senderType: senderType,
 		senderID:   senderID,
 		send:       make(chan []byte, 256),
-		ctx:        ctx,
-		cancel:     cancel,
 	}
 }
 
 func (c *Client) ReadPump() {
 	defer func() {
 		c.hub.unregister <- c
-		c.cancel()
-		c.conn.Close(websocket.StatusNormalClosure, "")
+		c.conn.Close()
 	}()
 
 	c.conn.SetReadLimit(maxMsgSize)
+	c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
+	c.conn.SetPongHandler(func(string) error {
+		c.conn.SetReadDeadline(time.Now().Add(pongTimeout))
+		return nil
+	})
 
 	for {
-		_, data, err := c.conn.Read(c.ctx)
+		_, data, err := c.conn.ReadMessage()
 		if err != nil {
-			if websocket.CloseStatus(err) == websocket.StatusNormalClosure {
-				log.Printf("ws: client %s:%d disconnected normally", c.senderType, c.senderID)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
+				log.Printf("ws: client %s:%d read error: %v", c.senderType, c.senderID, err)
 			}
 			return
 		}
@@ -78,32 +76,26 @@ func (c *Client) WritePump() {
 	ticker := time.NewTicker(pingInterval)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close(websocket.StatusNormalClosure, "")
+		c.conn.Close()
 	}()
 
 	for {
 		select {
 		case msg, ok := <-c.send:
 			if !ok {
+				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			ctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
-			err := c.conn.Write(ctx, websocket.MessageText, msg)
-			cancel()
-			if err != nil {
+			c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err := c.conn.WriteMessage(websocket.TextMessage, msg); err != nil {
 				return
 			}
 
 		case <-ticker.C:
-			ctx, cancel := context.WithTimeout(c.ctx, writeTimeout)
-			err := c.conn.Ping(ctx)
-			cancel()
-			if err != nil {
+			c.conn.SetWriteDeadline(time.Now().Add(writeTimeout))
+			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
-
-		case <-c.ctx.Done():
-			return
 		}
 	}
 }
