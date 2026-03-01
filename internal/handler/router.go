@@ -80,6 +80,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations", s.HandleCreateConversation)
 				full.GET("/conversations", s.HandleListConversations)
 				full.GET("/conversations/:id", s.HandleGetConversation)
+			full.PUT("/conversations/:id", s.HandleUpdateConversation)
 
 				// Participants
 				full.POST("/conversations/:id/participants", s.HandleAddParticipant)

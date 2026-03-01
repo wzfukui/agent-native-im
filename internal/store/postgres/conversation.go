@@ -45,3 +45,10 @@ func (s *PGStore) TouchConversation(ctx context.Context, id int64) error {
 		Exec(ctx)
 	return err
 }
+
+func (s *PGStore) UpdateConversation(ctx context.Context, conv *model.Conversation) error {
+	_, err := s.DB.NewUpdate().Model(conv).
+		Where("id = ?", conv.ID).
+		Exec(ctx)
+	return err
+}

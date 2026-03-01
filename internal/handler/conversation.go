@@ -260,3 +260,61 @@ func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 
 	OK(c, http.StatusOK, "participant removed")
 }
+
+// HandleUpdateConversation updates a conversation's properties (e.g., title).
+func (s *Server) HandleUpdateConversation(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req struct {
+		Title *string `json:"title"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	if req.Title == nil {
+		Fail(c, http.StatusBadRequest, "nothing to update")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	// Verify participant
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+
+	// Get conversation
+	conv, err := s.Store.GetConversation(ctx, convID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "conversation not found")
+		return
+	}
+
+	// Check permission: for direct convs, any participant can rename; for groups, need owner/admin
+	if req.Title != nil {
+		if conv.ConvType == model.ConvGroup || conv.ConvType == model.ConvChannel {
+			participant, err := s.Store.GetParticipant(ctx, convID, entityID)
+			if err != nil || (participant.Role != model.RoleOwner && participant.Role != model.RoleAdmin) {
+				Fail(c, http.StatusForbidden, "only owner or admin can rename this conversation")
+				return
+			}
+		}
+		conv.Title = *req.Title
+	}
+
+	if err := s.Store.UpdateConversation(ctx, conv); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to update conversation")
+		return
+	}
+
+	OK(c, http.StatusOK, conv)
+}
