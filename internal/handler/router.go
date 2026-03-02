@@ -39,6 +39,7 @@ func NewRouter(s *Server) *gin.Engine {
 	{
 		// Public
 		v1.GET("/ping", HandlePing)
+		v1.GET("/skill-template", HandleSkillTemplate)
 		v1.POST("/auth/login", s.HandleLogin)
 		v1.POST("/auth/register", s.HandleRegister)
 

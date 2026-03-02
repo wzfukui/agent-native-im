@@ -133,7 +133,20 @@ curl -X POST %s/api/v1/messages/send \
   -d '{"conversation_id": 1, "layers": {"summary": "Hello from %s!"}}'
 `+"```"+`
 
-## 消息层结构
+## 消息类型（content_type）
+
+| content_type | 用途 | 说明 |
+|---|---|---|
+| text | 纯文本 | 默认类型，Bot 消息自动按 Markdown 渲染 |
+| markdown | Markdown | 显式指定 Markdown 渲染 |
+| code | 代码块 | 简单代码展示（无 artifact shell） |
+| image | 图片 | 通过 attachments 传递图片 URL |
+| audio | 语音 | 通过 attachments 传递音频 |
+| file | 文件 | 通过 attachments 传递文件 |
+| artifact | 富内容 | 带标题栏、操作按钮的独立渲染卡片（见下方详情） |
+| system | 系统消息 | 系统通知（仅服务端使用） |
+
+## 消息层结构（layers）
 
 每条消息包含多个层，服务于不同消费者：
 
@@ -142,8 +155,65 @@ curl -X POST %s/api/v1/messages/send \
 | summary | string | 自然语言摘要 | 人类（主显示） |
 | thinking | string | 推理过程 | 人类（可折叠） |
 | status | object | 进度 {phase, progress, text} | 人类（进度条） |
-| data | object | 结构化 JSON | 其他 Agent |
+| data | object | 结构化 JSON | 其他 Agent / artifact 渲染 |
 | interaction | object | 交互卡片（审批/选择/表单） | 人类（可点击） |
+
+## Artifact 富内容
+
+当 content_type 为 artifact 时，前端会以独立卡片渲染 layers.data 中的富内容。
+
+**layers.data 字段：**
+
+| 字段 | 类型 | 必填 | 说明 |
+|---|---|---|---|
+| artifact_type | string | 是 | html / code / mermaid / image |
+| source | string | 是 | 源码、DSL 文本或图片 URL |
+| title | string | 否 | 卡片标题 |
+| language | string | 否 | 代码语言（code 类型时使用，如 python / javascript） |
+| height | number | 否 | iframe 高度（html 类型时使用，默认 300） |
+
+**artifact_type 说明：**
+
+| artifact_type | source 内容 | 渲染方式 |
+|---|---|---|
+| html | 完整 HTML 文档 | iframe 沙盒渲染（支持 JS，如 ECharts） |
+| code | 代码文本 | 语法高亮 + 语言标签 + 复制按钮 |
+| mermaid | Mermaid DSL | 渲染为 SVG 图表 |
+| image | 图片 URL | 响应式图片 + 点击放大 |
+
+**Artifact 示例：**
+
+`+"```json"+`
+// HTML 仪表盘
+{"conversation_id": 1, "content_type": "artifact", "layers": {
+  "summary": "Q1 销售数据",
+  "data": {"artifact_type": "html", "title": "Sales Dashboard", "height": 300,
+    "source": "<html><body style='background:#1a1a2e;color:#fff;padding:20px'><h2>Revenue: $2.4M</h2></body></html>"}
+}}
+
+// 代码片段
+{"conversation_id": 1, "content_type": "artifact", "layers": {
+  "summary": "API 调用示例",
+  "data": {"artifact_type": "code", "title": "Example", "language": "python",
+    "source": "import requests\nresp = requests.get('/api/v1/me')"}
+}}
+
+// Mermaid 流程图
+{"conversation_id": 1, "content_type": "artifact", "layers": {
+  "summary": "系统架构",
+  "data": {"artifact_type": "mermaid", "title": "Architecture",
+    "source": "graph TD\n  A[User] --> B[API Gateway]\n  B --> C[Agent Service]"}
+}}
+
+// 图片
+{"conversation_id": 1, "content_type": "artifact", "layers": {
+  "summary": "分析结果图",
+  "data": {"artifact_type": "image", "title": "Analysis Result",
+    "source": "https://example.com/chart.png"}
+}}
+`+"```"+`
+
+> 💡 layers.summary 始终会显示为文字说明，即使 artifact 渲染失败也能阅读。建议每条 artifact 消息都附带 summary。
 
 ## 流式响应协议
 
@@ -163,6 +233,16 @@ stream_end    → 最终结果（持久化到数据库）
   "layers": {"status": {"phase": "thinking", "progress": 0, "text": "分析中..."}}
 }}
 `+"```"+`
+
+## LLM Skill 模板
+
+如果你的 Agent 基于 LLM，可以获取输出格式指南注入到 system prompt 中，让 LLM 自动选择合适的消息格式：
+
+`+"```bash"+`
+curl %s/api/v1/skill-template?format=text
+`+"```"+`
+
+该模板告诉 LLM 何时使用 text、何时使用 artifact/html、artifact/code、artifact/mermaid 等格式。
 `,
 		entity.DisplayName,
 		serverURL, wsURL,
@@ -170,6 +250,7 @@ stream_end    → 最终结果（持久化到数据库）
 		bootstrapKey, serverURL,
 		serverURL, bootstrapKey,
 		serverURL, bootstrapKey, entity.DisplayName,
+		serverURL,
 	)
 
 	OK(c, http.StatusCreated, gin.H{
