@@ -53,6 +53,8 @@ type ParticipantStore interface {
 	GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error)
 	GetParticipant(ctx context.Context, conversationID, entityID int64) (*model.Participant, error)
 	UpdateSubscription(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode) error
+	MarkAsRead(ctx context.Context, conversationID, entityID, messageID int64) error
+	GetUnreadCounts(ctx context.Context, entityID int64) (map[int64]int, error)
 }
 
 type MessageStore interface {

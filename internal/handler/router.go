@@ -71,6 +71,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.DELETE("/entities/:id", s.HandleDeleteEntity)
 				full.POST("/entities/:id/approve", s.HandleApproveConnection)
 				full.GET("/entities/:id/status", s.HandleEntityStatus)
+				full.POST("/presence/batch", s.HandleBatchPresence)
 
 				// Webhook management
 				full.POST("/webhooks", s.HandleCreateWebhook)
@@ -87,6 +88,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations/:id/participants", s.HandleAddParticipant)
 				full.DELETE("/conversations/:id/participants/:entityId", s.HandleRemoveParticipant)
 				full.PUT("/conversations/:id/subscription", s.HandleUpdateSubscription)
+				full.POST("/conversations/:id/read", s.HandleMarkAsRead)
 
 				// Messages
 				full.POST("/messages/send", s.HandleSendMessage)

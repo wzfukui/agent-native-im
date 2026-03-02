@@ -263,6 +263,22 @@ func (s *Server) HandleEntityStatus(c *gin.Context) {
 	})
 }
 
+// HandleBatchPresence returns online status for a batch of entity IDs.
+func (s *Server) HandleBatchPresence(c *gin.Context) {
+	var req struct {
+		EntityIDs []int64 `json:"entity_ids" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, "entity_ids is required")
+		return
+	}
+	presence := make(map[int64]bool, len(req.EntityIDs))
+	for _, id := range req.EntityIDs {
+		presence[id] = s.Hub.IsOnline(id)
+	}
+	OK(c, http.StatusOK, gin.H{"presence": presence})
+}
+
 // HandleListEntities lists entities owned by the authenticated user, with online status.
 func (s *Server) HandleListEntities(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {

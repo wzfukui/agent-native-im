@@ -86,14 +86,60 @@ func (s *Server) HandleCreateConversation(c *gin.Context) {
 
 func (s *Server) HandleListConversations(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
 
-	convs, err := s.Store.ListConversationsByEntity(c.Request.Context(), entityID)
+	convs, err := s.Store.ListConversationsByEntity(ctx, entityID)
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to list conversations")
 		return
 	}
 
-	OK(c, http.StatusOK, convs)
+	// Enrich with unread counts
+	counts, _ := s.Store.GetUnreadCounts(ctx, entityID)
+
+	type convWithUnread struct {
+		*model.Conversation
+		UnreadCount int `json:"unread_count"`
+	}
+	result := make([]convWithUnread, len(convs))
+	for i, conv := range convs {
+		result[i] = convWithUnread{Conversation: conv, UnreadCount: counts[conv.ID]}
+	}
+
+	OK(c, http.StatusOK, result)
+}
+
+// HandleMarkAsRead marks messages up to a given ID as read for the caller.
+func (s *Server) HandleMarkAsRead(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req struct {
+		MessageID int64 `json:"message_id" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, "message_id is required")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant")
+		return
+	}
+
+	if err := s.Store.MarkAsRead(ctx, convID, entityID, req.MessageID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to mark as read")
+		return
+	}
+
+	OK(c, http.StatusOK, gin.H{"conversation_id": convID, "last_read_message_id": req.MessageID})
 }
 
 func (s *Server) HandleGetConversation(c *gin.Context) {
