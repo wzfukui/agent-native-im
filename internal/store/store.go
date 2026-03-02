@@ -15,7 +15,19 @@ type Store interface {
 	ParticipantStore
 	MessageStore
 	WebhookStore
+	PushStore
+	StatsStore
 	io.Closer
+}
+
+type StatsStore interface {
+	GetSystemStats(ctx context.Context) (map[string]interface{}, error)
+}
+
+type PushStore interface {
+	CreatePushSubscription(ctx context.Context, sub *model.PushSubscription) error
+	DeletePushSubscription(ctx context.Context, entityID int64, endpoint string) error
+	GetPushSubscriptionsByEntity(ctx context.Context, entityID int64) ([]*model.PushSubscription, error)
 }
 
 type EntityStore interface {
@@ -23,6 +35,7 @@ type EntityStore interface {
 	GetEntityByID(ctx context.Context, id int64) (*model.Entity, error)
 	GetEntityByName(ctx context.Context, name string, entityType model.EntityType) (*model.Entity, error)
 	ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*model.Entity, error)
+	ListAllEntities(ctx context.Context, limit, offset int) ([]*model.Entity, int, error)
 	UpdateEntity(ctx context.Context, entity *model.Entity) error
 	DeleteEntity(ctx context.Context, id int64) error
 }
@@ -41,6 +54,7 @@ type ConversationStore interface {
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	GetConversation(ctx context.Context, id int64) (*model.Conversation, error)
 	ListConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error)
+	ListAllConversations(ctx context.Context, limit, offset int) ([]*model.Conversation, int, error)
 	TouchConversation(ctx context.Context, id int64) error
 	UpdateConversation(ctx context.Context, conv *model.Conversation) error
 }
@@ -53,6 +67,7 @@ type ParticipantStore interface {
 	GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error)
 	GetParticipant(ctx context.Context, conversationID, entityID int64) (*model.Participant, error)
 	UpdateSubscription(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode) error
+	UpdateSubscriptionWithContext(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode, contextWindow int) error
 	MarkAsRead(ctx context.Context, conversationID, entityID, messageID int64) error
 	GetUnreadCounts(ctx context.Context, entityID int64) (map[int64]int, error)
 }

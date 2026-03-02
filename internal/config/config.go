@@ -10,6 +10,9 @@ type Config struct {
 	AdminPass         string
 	ServerURL         string
 	AutoApproveAgents bool
+	VAPIDPublicKey    string
+	VAPIDPrivateKey   string
+	VAPIDSubject      string
 }
 
 func Load() *Config {
@@ -21,6 +24,9 @@ func Load() *Config {
 		AdminPass:         getEnv("ADMIN_PASS", "admin123"),
 		ServerURL:         getEnv("SERVER_URL", "http://localhost:9800"),
 		AutoApproveAgents: getEnv("AUTO_APPROVE_AGENTS", "") == "true",
+		VAPIDPublicKey:    getEnv("VAPID_PUBLIC_KEY", ""),
+		VAPIDPrivateKey:   getEnv("VAPID_PRIVATE_KEY", ""),
+		VAPIDSubject:      getEnv("VAPID_SUBJECT", "mailto:admin@example.com"),
 	}
 }
 

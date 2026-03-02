@@ -9,6 +9,7 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/config"
 	"github.com/wzfukui/agent-native-im/internal/filestore"
 	"github.com/wzfukui/agent-native-im/internal/model"
+	"github.com/wzfukui/agent-native-im/internal/push"
 	"github.com/wzfukui/agent-native-im/internal/store"
 	"github.com/wzfukui/agent-native-im/internal/webhook"
 	"github.com/wzfukui/agent-native-im/internal/ws"
@@ -29,6 +30,7 @@ type Server struct {
 	Webhook   *webhook.Deliverer
 	Auth      *AuthHelper
 	FileStore filestore.FileStore
+	Push      *push.Sender
 }
 
 func NewRouter(s *Server) *gin.Engine {
@@ -42,6 +44,9 @@ func NewRouter(s *Server) *gin.Engine {
 		v1.GET("/skill-template", HandleSkillTemplate)
 		v1.POST("/auth/login", s.HandleLogin)
 		v1.POST("/auth/register", s.HandleRegister)
+
+		// Public push key endpoint (no auth needed)
+		v1.GET("/push/vapid-key", s.HandleGetVAPIDKey)
 
 		// Authenticated (any entity type, including bootstrap keys)
 		authed := v1.Group("")
@@ -59,11 +64,18 @@ func NewRouter(s *Server) *gin.Engine {
 				full.PUT("/me", s.HandleUpdateProfile)
 				full.PUT("/me/password", s.HandleChangePassword)
 
-				// Admin-only endpoints
+				full.GET("/me/devices", s.HandleListDevices)
+
+			// Admin-only endpoints
 				admin := full.Group("")
 				admin.Use(auth.RequireAdmin(s.Store, s.Config.AdminUser))
 				{
 					admin.POST("/admin/users", s.HandleCreateUser)
+					admin.GET("/admin/users", s.HandleAdminListUsers)
+					admin.PUT("/admin/users/:id", s.HandleAdminUpdateUser)
+					admin.DELETE("/admin/users/:id", s.HandleAdminDeleteUser)
+					admin.GET("/admin/stats", s.HandleAdminStats)
+					admin.GET("/admin/conversations", s.HandleAdminListConversations)
 				}
 				// Entity management (user-only at handler level)
 				full.POST("/entities", s.HandleCreateEntity)
@@ -99,6 +111,10 @@ func NewRouter(s *Server) *gin.Engine {
 
 				// File upload
 				full.POST("/files/upload", s.HandleFileUpload)
+
+				// Push notifications
+				full.POST("/push/subscribe", s.HandleRegisterPush)
+				full.POST("/push/unsubscribe", s.HandleUnregisterPush)
 
 				// Long polling
 				full.GET("/updates", s.HandleUpdates)

@@ -49,6 +49,16 @@ func (s *PGStore) UpdateEntity(ctx context.Context, entity *model.Entity) error 
 	return err
 }
 
+func (s *PGStore) ListAllEntities(ctx context.Context, limit, offset int) ([]*model.Entity, int, error) {
+	var entities []*model.Entity
+	count, err := s.DB.NewSelect().Model(&entities).
+		OrderExpr("created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	return entities, count, err
+}
+
 func (s *PGStore) DeleteEntity(ctx context.Context, id int64) error {
 	_, err := s.DB.NewUpdate().Model((*model.Entity)(nil)).
 		Set("status = ?", "disabled").

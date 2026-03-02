@@ -46,13 +46,19 @@ func (s *Server) HandleWS(c *gin.Context) {
 		isBootstrap = cred.CredType == model.CredBootstrap
 	}
 
+	deviceID := c.Query("device_id")
+	if deviceID == "" {
+		deviceID = fmt.Sprintf("srv-%x", sha256.Sum256([]byte(fmt.Sprintf("%d-%d", entityID, time.Now().UnixNano()))))[:16]
+	}
+	deviceInfo := c.Query("device_info")
+
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Printf("ws: upgrade error for entity %d: %v", entityID, err)
 		return
 	}
 
-	client := ws_pkg.NewClient(s.Hub, conn, entityID)
+	client := ws_pkg.NewClient(s.Hub, conn, entityID, deviceID, deviceInfo)
 	s.Hub.Register(client)
 
 	go client.WritePump()

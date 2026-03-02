@@ -1,0 +1,1 @@
+ALTER TABLE participants ADD COLUMN IF NOT EXISTS context_window INT NOT NULL DEFAULT 5;

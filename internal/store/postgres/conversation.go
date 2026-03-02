@@ -38,6 +38,18 @@ func (s *PGStore) ListConversationsByEntity(ctx context.Context, entityID int64)
 	return convs, err
 }
 
+func (s *PGStore) ListAllConversations(ctx context.Context, limit, offset int) ([]*model.Conversation, int, error) {
+	var convs []*model.Conversation
+	count, err := s.DB.NewSelect().Model(&convs).
+		Relation("Participants").
+		Relation("Participants.Entity").
+		OrderExpr("conversation.updated_at DESC").
+		Limit(limit).
+		Offset(offset).
+		ScanAndCount(ctx)
+	return convs, count, err
+}
+
 func (s *PGStore) TouchConversation(ctx context.Context, id int64) error {
 	_, err := s.DB.NewUpdate().Model((*model.Conversation)(nil)).
 		Set("updated_at = ?", time.Now()).

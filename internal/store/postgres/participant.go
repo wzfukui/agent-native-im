@@ -64,6 +64,17 @@ func (s *PGStore) UpdateSubscription(ctx context.Context, conversationID, entity
 	return err
 }
 
+func (s *PGStore) UpdateSubscriptionWithContext(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode, contextWindow int) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("subscription_mode = ?", mode).
+		Set("context_window = ?", contextWindow).
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
 func (s *PGStore) MarkAsRead(ctx context.Context, conversationID, entityID, messageID int64) error {
 	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
 		Set("last_read_message_id = GREATEST(last_read_message_id, ?)", messageID).

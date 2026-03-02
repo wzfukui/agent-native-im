@@ -18,8 +18,10 @@ const (
 type SubscriptionMode string
 
 const (
-	SubMentionOnly SubscriptionMode = "mention_only"
-	SubSubscribeAll SubscriptionMode = "subscribe_all"
+	SubMentionOnly    SubscriptionMode = "mention_only"
+	SubSubscribeAll   SubscriptionMode = "subscribe_all"
+	SubMentionWithCtx SubscriptionMode = "mention_with_context"
+	SubSubscribeDigest SubscriptionMode = "subscribe_digest"
 )
 
 type Participant struct {
@@ -30,6 +32,7 @@ type Participant struct {
 	EntityID         int64            `bun:"entity_id,notnull" json:"entity_id"`
 	Role             ParticipantRole  `bun:"role,notnull,default:'member'" json:"role"`
 	SubscriptionMode SubscriptionMode `bun:"subscription_mode,notnull,default:'mention_only'" json:"subscription_mode"`
+	ContextWindow     int              `bun:"context_window,notnull,default:5" json:"context_window"`
 	LastReadMessageID int64           `bun:"last_read_message_id,notnull,default:0" json:"last_read_message_id"`
 	JoinedAt         time.Time        `bun:"joined_at,nullzero,notnull,default:now()" json:"joined_at"`
 	LeftAt           *time.Time       `bun:"left_at" json:"left_at,omitempty"`

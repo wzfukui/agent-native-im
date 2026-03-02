@@ -10,6 +10,10 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/store"
 )
 
+// PushFunc is called for offline users when a message is broadcast.
+// entityID is the recipient, msg is the message being broadcast.
+type PushFunc func(entityID int64, msg *model.Message)
+
 type Hub struct {
 	store      store.Store
 	clients    map[*Client]bool
@@ -23,6 +27,9 @@ type Hub struct {
 	// Long polling waiters: entityID -> channels
 	waiters  map[int64][]chan struct{}
 	waiterMu sync.Mutex
+
+	// Push notification callback for offline users
+	OnPush PushFunc
 }
 
 func NewHub(st store.Store) *Hub {
@@ -74,6 +81,37 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// DeviceInfo describes a connected device.
+type DeviceInfo struct {
+	DeviceID   string `json:"device_id"`
+	DeviceInfo string `json:"device_info"`
+	EntityID   int64  `json:"entity_id"`
+}
+
+// GetConnectedDevices returns all active devices for an entity.
+func (h *Hub) GetConnectedDevices(entityID int64) []DeviceInfo {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	var devices []DeviceInfo
+	for client := range h.clients {
+		if client.entityID == entityID {
+			devices = append(devices, DeviceInfo{
+				DeviceID:   client.deviceID,
+				DeviceInfo: client.deviceInfo,
+				EntityID:   client.entityID,
+			})
+		}
+	}
+	return devices
+}
+
+// ConnectionCount returns the total number of active WebSocket connections.
+func (h *Hub) ConnectionCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.clients)
 }
 
 // isOnlineLocked checks if an entity has active connections. Caller must hold h.mu (read or write).
@@ -243,7 +281,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 		mentionSet[eid] = true
 	}
 
-	// Load participant subscription modes and entity types
+	// Load participant subscription modes, entity types, and context windows
 	ctx := context.Background()
 	participants, err := h.store.ListParticipants(ctx, msg.ConversationID)
 	if err != nil {
@@ -251,8 +289,10 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 	}
 	subModes := make(map[int64]model.SubscriptionMode)
 	entityTypes := make(map[int64]model.EntityType)
+	contextWindows := make(map[int64]int)
 	for _, p := range participants {
 		subModes[p.EntityID] = p.SubscriptionMode
+		contextWindows[p.EntityID] = p.ContextWindow
 		if p.Entity != nil {
 			entityTypes[p.EntityID] = p.Entity.EntityType
 		}
@@ -294,11 +334,36 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			shouldDeliver = true
 		case model.SubMentionOnly:
 			shouldDeliver = mentionSet[client.entityID]
+		case model.SubMentionWithCtx:
+			shouldDeliver = mentionSet[client.entityID]
+		case model.SubSubscribeDigest:
+			shouldDeliver = false // bot polls manually via REST
 		}
 
 		if shouldDeliver {
+			// For mention_with_context, enrich payload with recent messages
+			deliveryData := data
+			if mode == model.SubMentionWithCtx {
+				ctxWindow := contextWindows[client.entityID]
+				if ctxWindow <= 0 {
+					ctxWindow = 5
+				}
+				recentMsgs, err := h.store.ListMessages(ctx, msg.ConversationID, msg.ID, ctxWindow)
+				if err == nil && len(recentMsgs) > 0 {
+					enriched := WSMessage{
+						Type: "message.new",
+						Data: map[string]interface{}{
+							"message":          msg,
+							"context_messages": recentMsgs,
+						},
+					}
+					if enrichedData, err := json.Marshal(enriched); err == nil {
+						deliveryData = enrichedData
+					}
+				}
+			}
 			select {
-			case client.send <- data:
+			case client.send <- deliveryData:
 			default:
 				log.Printf("ws: entity %d send buffer full (broadcast-bot), dropping", client.entityID)
 			}
@@ -307,6 +372,22 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 
 	// Notify long-polling waiters for all participants except the sender
 	h.notifyParticipantWaiters(msg.ConversationID, msg.SenderID)
+
+	// Send push notifications to offline human users
+	if h.OnPush != nil {
+		for _, p := range participants {
+			if p.EntityID == msg.SenderID {
+				continue
+			}
+			// Only push to human users
+			if p.Entity == nil || p.Entity.EntityType != model.EntityUser {
+				continue
+			}
+			if !h.IsOnline(p.EntityID) {
+				go h.OnPush(p.EntityID, msg)
+			}
+		}
+	}
 }
 
 // BroadcastStream sends an ephemeral stream message (not persisted).

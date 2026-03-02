@@ -360,6 +360,13 @@ func (s *Server) HandleBatchPresence(c *gin.Context) {
 	OK(c, http.StatusOK, gin.H{"presence": presence})
 }
 
+// HandleListDevices returns the list of connected devices for the current entity.
+func (s *Server) HandleListDevices(c *gin.Context) {
+	entityID := auth.GetEntityID(c)
+	devices := s.Hub.GetConnectedDevices(entityID)
+	OK(c, http.StatusOK, gin.H{"devices": devices})
+}
+
 // HandleListEntities lists entities owned by the authenticated user, with online status.
 func (s *Server) HandleListEntities(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {

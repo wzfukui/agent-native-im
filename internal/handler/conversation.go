@@ -236,16 +236,23 @@ func (s *Server) HandleUpdateSubscription(c *gin.Context) {
 	}
 
 	var req struct {
-		Mode string `json:"mode" binding:"required"`
+		Mode          string `json:"mode" binding:"required"`
+		ContextWindow *int   `json:"context_window"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, http.StatusBadRequest, "mode is required")
 		return
 	}
 
+	validModes := map[model.SubscriptionMode]bool{
+		model.SubMentionOnly:    true,
+		model.SubSubscribeAll:   true,
+		model.SubMentionWithCtx: true,
+		model.SubSubscribeDigest: true,
+	}
 	mode := model.SubscriptionMode(req.Mode)
-	if mode != model.SubMentionOnly && mode != model.SubSubscribeAll {
-		Fail(c, http.StatusBadRequest, "mode must be mention_only or subscribe_all")
+	if !validModes[mode] {
+		Fail(c, http.StatusBadRequest, "mode must be mention_only, subscribe_all, mention_with_context, or subscribe_digest")
 		return
 	}
 
@@ -258,12 +265,20 @@ func (s *Server) HandleUpdateSubscription(c *gin.Context) {
 		return
 	}
 
-	if err := s.Store.UpdateSubscription(ctx, convID, entityID, mode); err != nil {
+	// Update with context_window if provided and mode is mention_with_context
+	contextWindow := 5
+	if req.ContextWindow != nil && *req.ContextWindow > 0 {
+		contextWindow = *req.ContextWindow
+		if contextWindow > 50 {
+			contextWindow = 50
+		}
+	}
+	if err := s.Store.UpdateSubscriptionWithContext(ctx, convID, entityID, mode, contextWindow); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to update subscription")
 		return
 	}
 
-	OK(c, http.StatusOK, gin.H{"mode": mode})
+	OK(c, http.StatusOK, gin.H{"mode": mode, "context_window": contextWindow})
 }
 
 // HandleRemoveParticipant removes an entity from a conversation.
