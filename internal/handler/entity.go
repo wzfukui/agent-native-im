@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -289,6 +290,71 @@ func (s *Server) HandleListEntities(c *gin.Context) {
 	}
 
 	OK(c, http.StatusOK, result)
+}
+
+// HandleUpdateEntity updates an entity's display name, description, or metadata.
+func (s *Server) HandleUpdateEntity(c *gin.Context) {
+	if auth.GetEntityType(c) != model.EntityUser {
+		Fail(c, http.StatusForbidden, "only users can update entities")
+		return
+	}
+
+	entityID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid entity id")
+		return
+	}
+
+	var req struct {
+		DisplayName *string                `json:"display_name"`
+		Metadata    map[string]interface{} `json:"metadata"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ctx := c.Request.Context()
+	target, err := s.Store.GetEntityByID(ctx, entityID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "entity not found")
+		return
+	}
+
+	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
+		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		return
+	}
+
+	if req.DisplayName != nil {
+		target.DisplayName = *req.DisplayName
+	}
+	if req.Metadata != nil {
+		// Merge new metadata into existing
+		var existing map[string]interface{}
+		if len(target.Metadata) > 0 {
+			_ = json.Unmarshal(target.Metadata, &existing)
+		}
+		if existing == nil {
+			existing = make(map[string]interface{})
+		}
+		for k, v := range req.Metadata {
+			if v == nil {
+				delete(existing, k)
+			} else {
+				existing[k] = v
+			}
+		}
+		merged, _ := json.Marshal(existing)
+		target.Metadata = merged
+	}
+
+	if err := s.Store.UpdateEntity(ctx, target); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to update entity")
+		return
+	}
+
+	OK(c, http.StatusOK, target)
 }
 
 // HandleDeleteEntity soft-deletes an entity owned by the authenticated user.

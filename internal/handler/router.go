@@ -67,6 +67,7 @@ func NewRouter(s *Server) *gin.Engine {
 				// Entity management (user-only at handler level)
 				full.POST("/entities", s.HandleCreateEntity)
 				full.GET("/entities", s.HandleListEntities)
+				full.PUT("/entities/:id", s.HandleUpdateEntity)
 				full.DELETE("/entities/:id", s.HandleDeleteEntity)
 				full.POST("/entities/:id/approve", s.HandleApproveConnection)
 				full.GET("/entities/:id/status", s.HandleEntityStatus)
