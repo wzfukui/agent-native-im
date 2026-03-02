@@ -261,6 +261,115 @@ func TestEntityListWithOnlineStatus(t *testing.T) {
 	}
 }
 
+func TestUpdateEntityDisplayName(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "update-me"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity, _ := data["entity"].(map[string]interface{})
+	entityID := int(entity["id"].(float64))
+
+	// Update display name
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(token), map[string]interface{}{
+		"display_name": "New Display Name",
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	updated := parseOK(t, resp)
+	if updated["display_name"] != "New Display Name" {
+		t.Fatalf("expected display_name='New Display Name', got %v", updated["display_name"])
+	}
+}
+
+func TestUpdateEntityMetadata(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "meta-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity, _ := data["entity"].(map[string]interface{})
+	entityID := int(entity["id"].(float64))
+
+	// Set metadata
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(token), map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"description":  "A test bot",
+			"capabilities": []string{"chat", "search"},
+		},
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	updated := parseOK(t, resp)
+	meta, _ := updated["metadata"].(map[string]interface{})
+	if meta["description"] != "A test bot" {
+		t.Fatalf("expected description='A test bot', got %v", meta["description"])
+	}
+
+	// Merge more metadata (existing keys should persist)
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(token), map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"version": "1.0",
+		},
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	updated = parseOK(t, resp)
+	meta, _ = updated["metadata"].(map[string]interface{})
+	if meta["description"] != "A test bot" {
+		t.Fatal("metadata merge should preserve existing keys")
+	}
+	if meta["version"] != "1.0" {
+		t.Fatal("metadata merge should add new keys")
+	}
+
+	// Delete a metadata key by setting to null
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(token), map[string]interface{}{
+		"metadata": map[string]interface{}{
+			"version": nil,
+		},
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	updated = parseOK(t, resp)
+	meta, _ = updated["metadata"].(map[string]interface{})
+	if _, exists := meta["version"]; exists {
+		t.Fatal("setting metadata key to null should delete it")
+	}
+	if meta["description"] != "A test bot" {
+		t.Fatal("other metadata keys should be preserved")
+	}
+}
+
+func TestUpdateEntityOwnershipCheck(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "owned-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity, _ := data["entity"].(map[string]interface{})
+	entityID := int(entity["id"].(float64))
+
+	// Create another user
+	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
+		"username": "other",
+		"password": "other123",
+	})
+	otherToken := login(t, "other", "other123")
+
+	// Other user tries to update — should fail
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(otherToken), map[string]interface{}{
+		"display_name": "Hacked",
+	})
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 // newWSTestServer creates an httptest.Server wired to the same router for WebSocket testing.
 func newWSTestServer(t *testing.T) *httptest.Server {
 	t.Helper()
