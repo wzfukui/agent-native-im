@@ -412,6 +412,13 @@ func (h *Hub) handleSend(client *Client, rawData []byte) {
 
 	_ = h.store.TouchConversation(ctx, payload.ConversationID)
 
+	// Populate sender info before broadcasting
+	sender, err := h.store.GetEntityByID(ctx, client.entityID)
+	if err == nil {
+		msg.SenderType = string(sender.EntityType)
+		msg.Sender = sender
+	}
+
 	h.BroadcastMessage(msg)
 }
 
