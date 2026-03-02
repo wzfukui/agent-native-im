@@ -122,6 +122,7 @@ func (h *Hub) broadcastPresence(entityID int64, online bool) {
 			select {
 			case client.send <- data:
 			default:
+				log.Printf("ws: entity %d send buffer full (presence), dropping", client.entityID)
 			}
 			sent[client] = true
 		}
@@ -200,6 +201,7 @@ func (h *Hub) SendToEntity(entityID int64, msg WSMessage) {
 		select {
 		case client.send <- data:
 		default:
+			log.Printf("ws: entity %d send buffer full (direct), dropping", client.entityID)
 		}
 	}
 }
@@ -265,6 +267,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			select {
 			case client.send <- data:
 			default:
+				log.Printf("ws: entity %d send buffer full (broadcast-sender), dropping", client.entityID)
 			}
 			continue
 		}
@@ -274,6 +277,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			select {
 			case client.send <- data:
 			default:
+				log.Printf("ws: entity %d send buffer full (broadcast-user), dropping", client.entityID)
 			}
 			continue
 		}
@@ -296,6 +300,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			select {
 			case client.send <- data:
 			default:
+				log.Printf("ws: entity %d send buffer full (broadcast-bot), dropping", client.entityID)
 			}
 		}
 	}
@@ -324,6 +329,7 @@ func (h *Hub) BroadcastStream(convID int64, streamType string, payload interface
 		select {
 		case client.send <- data:
 		default:
+			log.Printf("ws: entity %d send buffer full (stream), dropping", client.entityID)
 		}
 	}
 }
@@ -346,6 +352,7 @@ func (h *Hub) BroadcastEvent(convID int64, eventType string, payload interface{}
 		select {
 		case client.send <- data:
 		default:
+			log.Printf("ws: entity %d send buffer full (event), dropping", client.entityID)
 		}
 	}
 }

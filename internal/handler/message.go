@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -35,6 +36,15 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 	if err != nil || !ok {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
 		return
+	}
+
+	// Validate mentions are actual participants
+	for _, mentionID := range req.Mentions {
+		isMember, err := s.Store.IsParticipant(ctx, req.ConversationID, mentionID)
+		if err != nil || !isMember {
+			Fail(c, http.StatusBadRequest, fmt.Sprintf("mentioned entity %d is not a participant", mentionID))
+			return
+		}
 	}
 
 	contentType := model.ContentType(req.ContentType)

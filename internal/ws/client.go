@@ -108,6 +108,7 @@ func (c *Client) sendJSON(v interface{}) {
 	select {
 	case c.send <- data:
 	default:
+		log.Printf("ws: entity %d send buffer full, dropping message", c.entityID)
 	}
 }
 

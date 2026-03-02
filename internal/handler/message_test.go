@@ -536,5 +536,60 @@ func TestListMessagesLimitCap(t *testing.T) {
 	assertStatus(t, resp, http.StatusOK)
 }
 
+func TestMentionNonParticipant(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create a bot but do NOT add it to the conversation
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "outsider-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := botEntity["id"].(float64)
+
+	// Create a conversation (only admin is a participant)
+	convID := setupConversation(t, token)
+
+	// Mention the non-participant bot — should fail
+	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
+		"conversation_id": convID,
+		"content_type":    "text",
+		"layers":          map[string]string{"summary": "@outsider-bot hello"},
+		"mentions":        []float64{botID},
+	})
+	assertStatus(t, resp, http.StatusBadRequest)
+}
+
+func TestMentionParticipantSucceeds(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create a bot
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "member-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := botEntity["id"].(float64)
+
+	// Create group conversation with bot as participant
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Mention OK Test",
+		"conv_type":       "group",
+		"participant_ids": []float64{botID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	// Mention the participant bot — should succeed
+	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
+		"conversation_id": convID,
+		"content_type":    "text",
+		"layers":          map[string]string{"summary": "@member-bot check this"},
+		"mentions":        []float64{botID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+}
+
 // Suppress unused import warning for time
 var _ = time.Now
