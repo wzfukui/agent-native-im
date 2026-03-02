@@ -18,10 +18,11 @@ const (
 type Conversation struct {
 	bun.BaseModel `bun:"table:conversations"`
 
-	ID        int64           `bun:"id,pk,autoincrement" json:"id"`
-	ConvType  ConvType        `bun:"conv_type,notnull,default:'direct'" json:"conv_type"`
-	Title     string          `bun:"title" json:"title"`
-	Metadata  json.RawMessage `bun:"metadata,type:jsonb,notnull,default:'{}'" json:"metadata,omitempty"`
+	ID          int64           `bun:"id,pk,autoincrement" json:"id"`
+	ConvType    ConvType        `bun:"conv_type,notnull,default:'direct'" json:"conv_type"`
+	Title       string          `bun:"title" json:"title"`
+	Description string          `bun:"description,notnull,default:''" json:"description"`
+	Metadata    json.RawMessage `bun:"metadata,type:jsonb,notnull,default:'{}'" json:"metadata,omitempty"`
 	CreatedAt time.Time       `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`
 	UpdatedAt time.Time       `bun:"updated_at,nullzero,notnull,default:now()" json:"updated_at"`
 

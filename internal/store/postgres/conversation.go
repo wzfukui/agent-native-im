@@ -31,6 +31,7 @@ func (s *PGStore) ListConversationsByEntity(ctx context.Context, entityID int64)
 		Join("JOIN participants AS p ON p.conversation_id = conversation.id").
 		Where("p.entity_id = ?", entityID).
 		Where("p.left_at IS NULL").
+		Where("p.archived_at IS NULL").
 		Relation("Participants").
 		Relation("Participants.Entity").
 		OrderExpr("conversation.updated_at DESC").

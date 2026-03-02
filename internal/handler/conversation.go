@@ -1,17 +1,53 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
+// getEntityDisplayName returns display_name or name as fallback.
+func getEntityDisplayName(e *model.Entity) string {
+	if e == nil {
+		return "unknown"
+	}
+	if e.DisplayName != "" {
+		return e.DisplayName
+	}
+	return e.Name
+}
+
+// broadcastSystemMessage persists a system message and broadcasts it.
+func (s *Server) broadcastSystemMessage(c *gin.Context, convID, senderID int64, summary string) {
+	ctx := c.Request.Context()
+	sysMsg := &model.Message{
+		ConversationID: convID,
+		SenderID:       senderID,
+		ContentType:    model.ContentSystem,
+		Layers:         model.MessageLayers{Summary: summary},
+	}
+	if err := s.Store.CreateMessage(ctx, sysMsg); err != nil {
+		return
+	}
+	sender, err := s.Store.GetEntityByID(ctx, senderID)
+	if err == nil && sender != nil {
+		sysMsg.SenderType = string(sender.EntityType)
+		sysMsg.Sender = sender
+	}
+	if s.Hub != nil {
+		s.Hub.BroadcastMessage(sysMsg)
+	}
+}
+
 type createConversationRequest struct {
-	Title        string  `json:"title"`
-	ConvType     string  `json:"conv_type"` // defaults to "direct"
+	Title          string  `json:"title"`
+	Description    string  `json:"description"`
+	ConvType       string  `json:"conv_type"`
 	ParticipantIDs []int64 `json:"participant_ids"`
 }
 
@@ -33,8 +69,9 @@ func (s *Server) HandleCreateConversation(c *gin.Context) {
 	}
 
 	conv := &model.Conversation{
-		ConvType: convType,
-		Title:    req.Title,
+		ConvType:    convType,
+		Title:       req.Title,
+		Description: req.Description,
 	}
 
 	if err := s.Store.CreateConversation(ctx, conv); err != nil {
@@ -152,7 +189,6 @@ func (s *Server) HandleGetConversation(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	// Verify participant
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
@@ -188,7 +224,6 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	// Verify caller is participant
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
@@ -202,11 +237,11 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 		role = model.RoleObserver
 	}
 
-	// Only owner/admin can assign admin role
-	if role == model.RoleAdmin {
+	// Only owner/admin can assign admin/observer role
+	if role == model.RoleAdmin || role == model.RoleObserver {
 		caller, err := s.Store.GetParticipant(ctx, convID, entityID)
 		if err != nil || (caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin) {
-			Fail(c, http.StatusForbidden, "only owner or admin can assign admin role")
+			Fail(c, http.StatusForbidden, "only owner or admin can assign this role")
 			return
 		}
 	}
@@ -220,8 +255,25 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 		return
 	}
 
+	// Subscribe entity to WS and broadcast
 	if s.Hub != nil {
+		s.Hub.SubscribeEntity(convID, req.EntityID)
 		s.Hub.NotifyNewConversation(convID, req.EntityID)
+	}
+
+	// System message
+	adder, _ := s.Store.GetEntityByID(ctx, entityID)
+	added, _ := s.Store.GetEntityByID(ctx, req.EntityID)
+	s.broadcastSystemMessage(c, convID, entityID,
+		fmt.Sprintf("%s 邀请 %s 加入了群聊", getEntityDisplayName(adder), getEntityDisplayName(added)))
+
+	// Broadcast conversation update
+	if s.Hub != nil {
+		s.Hub.BroadcastEvent(convID, "conversation.updated", map[string]interface{}{
+			"conversation_id": convID,
+			"action":          "member_added",
+			"entity_id":       req.EntityID,
+		})
 	}
 
 	OK(c, http.StatusCreated, "participant added")
@@ -245,9 +297,9 @@ func (s *Server) HandleUpdateSubscription(c *gin.Context) {
 	}
 
 	validModes := map[model.SubscriptionMode]bool{
-		model.SubMentionOnly:    true,
-		model.SubSubscribeAll:   true,
-		model.SubMentionWithCtx: true,
+		model.SubMentionOnly:     true,
+		model.SubSubscribeAll:    true,
+		model.SubMentionWithCtx:  true,
 		model.SubSubscribeDigest: true,
 	}
 	mode := model.SubscriptionMode(req.Mode)
@@ -265,7 +317,6 @@ func (s *Server) HandleUpdateSubscription(c *gin.Context) {
 		return
 	}
 
-	// Update with context_window if provided and mode is mention_with_context
 	contextWindow := 5
 	if req.ContextWindow != nil && *req.ContextWindow > 0 {
 		contextWindow = *req.ContextWindow
@@ -282,7 +333,6 @@ func (s *Server) HandleUpdateSubscription(c *gin.Context) {
 }
 
 // HandleRemoveParticipant removes an entity from a conversation.
-// Only owner/admin can remove others; any participant can remove themselves.
 func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -299,14 +349,12 @@ func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	// Verify caller is participant and get their role
 	caller, err := s.Store.GetParticipant(ctx, convID, entityID)
 	if err != nil || caller == nil {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
 		return
 	}
 
-	// Self-removal is always allowed; removing others requires owner/admin
 	if targetID != entityID {
 		if caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin {
 			Fail(c, http.StatusForbidden, "only owner or admin can remove other participants")
@@ -319,10 +367,31 @@ func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 		return
 	}
 
+	// System message
+	remover, _ := s.Store.GetEntityByID(ctx, entityID)
+	removed, _ := s.Store.GetEntityByID(ctx, targetID)
+	var summary string
+	if targetID == entityID {
+		summary = fmt.Sprintf("%s 离开了群聊", getEntityDisplayName(remover))
+	} else {
+		summary = fmt.Sprintf("%s 移除了 %s", getEntityDisplayName(remover), getEntityDisplayName(removed))
+	}
+	s.broadcastSystemMessage(c, convID, entityID, summary)
+
+	// Unsubscribe from WS and broadcast
+	if s.Hub != nil {
+		s.Hub.UnsubscribeEntity(convID, targetID)
+		s.Hub.BroadcastEvent(convID, "conversation.updated", map[string]interface{}{
+			"conversation_id": convID,
+			"action":          "member_removed",
+			"entity_id":       targetID,
+		})
+	}
+
 	OK(c, http.StatusOK, "participant removed")
 }
 
-// HandleUpdateConversation updates a conversation's properties (e.g., title).
+// HandleUpdateConversation updates a conversation's title and/or description.
 func (s *Server) HandleUpdateConversation(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
@@ -331,14 +400,15 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 	}
 
 	var req struct {
-		Title *string `json:"title"`
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if req.Title == nil {
+	if req.Title == nil && req.Description == nil {
 		Fail(c, http.StatusBadRequest, "nothing to update")
 		return
 	}
@@ -346,30 +416,39 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	// Verify participant
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
 		return
 	}
 
-	// Get conversation
 	conv, err := s.Store.GetConversation(ctx, convID)
 	if err != nil {
 		Fail(c, http.StatusNotFound, "conversation not found")
 		return
 	}
 
-	// Check permission: for direct convs, any participant can rename; for groups, need owner/admin
-	if req.Title != nil {
-		if conv.ConvType == model.ConvGroup || conv.ConvType == model.ConvChannel {
-			participant, err := s.Store.GetParticipant(ctx, convID, entityID)
-			if err != nil || (participant.Role != model.RoleOwner && participant.Role != model.RoleAdmin) {
-				Fail(c, http.StatusForbidden, "only owner or admin can rename this conversation")
-				return
-			}
+	// Permission check for groups/channels
+	if conv.ConvType == model.ConvGroup || conv.ConvType == model.ConvChannel {
+		participant, err := s.Store.GetParticipant(ctx, convID, entityID)
+		if err != nil || (participant.Role != model.RoleOwner && participant.Role != model.RoleAdmin) {
+			Fail(c, http.StatusForbidden, "only owner or admin can update this conversation")
+			return
 		}
+	}
+
+	// Build system message summary
+	sender, _ := s.Store.GetEntityByID(ctx, entityID)
+	senderName := getEntityDisplayName(sender)
+	var summaryParts []string
+
+	if req.Title != nil {
 		conv.Title = *req.Title
+		summaryParts = append(summaryParts, fmt.Sprintf("%s 修改了群名为 \"%s\"", senderName, *req.Title))
+	}
+	if req.Description != nil {
+		conv.Description = *req.Description
+		summaryParts = append(summaryParts, fmt.Sprintf("%s 修改了群描述", senderName))
 	}
 
 	if err := s.Store.UpdateConversation(ctx, conv); err != nil {
@@ -377,5 +456,132 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 		return
 	}
 
+	// System message and broadcast
+	if len(summaryParts) > 0 {
+		s.broadcastSystemMessage(c, convID, entityID, strings.Join(summaryParts, "；"))
+	}
+
+	if s.Hub != nil {
+		s.Hub.BroadcastEvent(convID, "conversation.updated", map[string]interface{}{
+			"conversation_id": convID,
+			"title":           conv.Title,
+			"description":     conv.Description,
+			"updated_by":      entityID,
+		})
+	}
+
 	OK(c, http.StatusOK, conv)
+}
+
+// HandleLeaveConversation allows a participant to leave a conversation.
+func (s *Server) HandleLeaveConversation(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	participant, err := s.Store.GetParticipant(ctx, convID, entityID)
+	if err != nil || participant == nil {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+
+	// If owner is leaving, transfer ownership to next admin or oldest member
+	if participant.Role == model.RoleOwner {
+		participants, _ := s.Store.ListParticipants(ctx, convID)
+		var newOwner *model.Participant
+		for _, p := range participants {
+			if p.EntityID == entityID {
+				continue
+			}
+			if p.Role == model.RoleAdmin {
+				newOwner = p
+				break
+			}
+			if newOwner == nil {
+				newOwner = p
+			}
+		}
+		if newOwner != nil {
+			_ = s.Store.UpdateParticipantRole(ctx, convID, newOwner.EntityID, model.RoleOwner)
+			newOwnerEntity, _ := s.Store.GetEntityByID(ctx, newOwner.EntityID)
+			s.broadcastSystemMessage(c, convID, entityID,
+				fmt.Sprintf("群主已转让给 %s", getEntityDisplayName(newOwnerEntity)))
+		}
+	}
+
+	if err := s.Store.RemoveParticipant(ctx, convID, entityID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to leave conversation")
+		return
+	}
+
+	leaver, _ := s.Store.GetEntityByID(ctx, entityID)
+	s.broadcastSystemMessage(c, convID, entityID,
+		fmt.Sprintf("%s 离开了群聊", getEntityDisplayName(leaver)))
+
+	if s.Hub != nil {
+		s.Hub.UnsubscribeEntity(convID, entityID)
+		s.Hub.BroadcastEvent(convID, "conversation.updated", map[string]interface{}{
+			"conversation_id": convID,
+			"action":          "member_left",
+			"entity_id":       entityID,
+		})
+	}
+
+	OK(c, http.StatusOK, "left conversation")
+}
+
+// HandleArchiveConversation archives a conversation for the caller.
+func (s *Server) HandleArchiveConversation(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+
+	if err := s.Store.ArchiveConversation(ctx, convID, entityID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to archive conversation")
+		return
+	}
+
+	OK(c, http.StatusOK, "conversation archived")
+}
+
+// HandleUnarchiveConversation unarchives a conversation for the caller.
+func (s *Server) HandleUnarchiveConversation(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	// Use raw check since archived convs are excluded from normal participant check
+	p, err := s.Store.GetParticipant(ctx, convID, entityID)
+	if err != nil || p == nil {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+
+	if err := s.Store.UnarchiveConversation(ctx, convID, entityID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to unarchive conversation")
+		return
+	}
+
+	OK(c, http.StatusOK, "conversation unarchived")
 }

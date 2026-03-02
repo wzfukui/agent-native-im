@@ -217,6 +217,38 @@ func (h *Hub) NotifyNewConversation(convID int64, entityIDs ...int64) {
 	}
 }
 
+// SubscribeEntity subscribes all active WS connections of an entity to a conversation.
+func (h *Hub) SubscribeEntity(convID int64, entityID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.convClients[convID] == nil {
+		h.convClients[convID] = make(map[*Client]bool)
+	}
+	for client := range h.clients {
+		if client.entityID == entityID {
+			h.convClients[convID][client] = true
+		}
+	}
+}
+
+// UnsubscribeEntity removes all WS connections of an entity from a conversation.
+func (h *Hub) UnsubscribeEntity(convID int64, entityID int64) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	clients := h.convClients[convID]
+	if clients == nil {
+		return
+	}
+	for client := range clients {
+		if client.entityID == entityID {
+			delete(clients, client)
+		}
+	}
+	if len(clients) == 0 {
+		delete(h.convClients, convID)
+	}
+}
+
 // SendToEntity sends a message to all WebSocket connections of a specific entity.
 func (h *Hub) SendToEntity(entityID int64, msg WSMessage) {
 	data, err := json.Marshal(msg)
@@ -450,11 +482,16 @@ func (h *Hub) handleSend(client *Client, rawData []byte) {
 
 	payload := envelope.Data
 
-	// Verify participant
+	// Verify participant and check observer role
 	ctx := context.Background()
 	ok, err := h.store.IsParticipant(ctx, payload.ConversationID, client.entityID)
 	if err != nil || !ok {
 		client.sendError("not a participant of this conversation")
+		return
+	}
+	participant, pErr := h.store.GetParticipant(ctx, payload.ConversationID, client.entityID)
+	if pErr == nil && participant != nil && participant.Role == model.RoleObserver {
+		client.sendError("observers cannot send messages")
 		return
 	}
 
@@ -552,6 +589,103 @@ func (h *Hub) notifyParticipantWaiters(conversationID, senderID int64) {
 		}
 		// Don't nil out — let UnregisterWaiter clean up properly
 	}
+}
+
+// handleTyping forwards typing indicators to other clients in the conversation.
+func (h *Hub) handleTyping(client *Client, rawData []byte) {
+	var envelope struct {
+		Type string `json:"type"`
+		Data struct {
+			ConversationID int64 `json:"conversation_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawData, &envelope); err != nil {
+		return
+	}
+	if envelope.Data.ConversationID == 0 {
+		return
+	}
+
+	// Look up entity name
+	entityName := ""
+	ent, err := h.store.GetEntityByID(context.Background(), client.entityID)
+	if err == nil && ent != nil {
+		if ent.DisplayName != "" {
+			entityName = ent.DisplayName
+		} else {
+			entityName = ent.Name
+		}
+	}
+
+	// Broadcast typing to other members
+	payload := map[string]interface{}{
+		"conversation_id": envelope.Data.ConversationID,
+		"entity_id":       client.entityID,
+		"entity_name":     entityName,
+	}
+	msg := WSMessage{Type: "typing", Data: payload}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	clients := h.copyConvClients(envelope.Data.ConversationID)
+	for _, c := range clients {
+		if c == client {
+			continue
+		}
+		select {
+		case c.send <- data:
+		default:
+		}
+	}
+}
+
+// handleStatusUpdate broadcasts an entity's status update.
+func (h *Hub) handleStatusUpdate(client *Client, rawData []byte) {
+	var envelope struct {
+		Type string `json:"type"`
+		Data struct {
+			Status string `json:"status"`
+			Text   string `json:"text"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawData, &envelope); err != nil {
+		return
+	}
+
+	ctx := context.Background()
+	convIDs, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
+	if err != nil {
+		return
+	}
+
+	payload := map[string]interface{}{
+		"entity_id": client.entityID,
+		"status":    envelope.Data.Status,
+		"text":      envelope.Data.Text,
+	}
+	msg := WSMessage{Type: "entity.status_update", Data: payload}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	h.mu.RLock()
+	sent := make(map[*Client]bool)
+	for _, convID := range convIDs {
+		for c := range h.convClients[convID] {
+			if c.entityID == client.entityID || sent[c] {
+				continue
+			}
+			select {
+			case c.send <- data:
+			default:
+			}
+			sent[c] = true
+		}
+	}
+	h.mu.RUnlock()
 }
 
 // HandleTaskCancel processes a task cancellation request from a user.

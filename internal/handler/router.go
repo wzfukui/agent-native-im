@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/config"
+	"github.com/wzfukui/agent-native-im/internal/middleware"
 	"github.com/wzfukui/agent-native-im/internal/filestore"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/push"
@@ -51,6 +52,7 @@ func NewRouter(s *Server) *gin.Engine {
 		// Authenticated (any entity type, including bootstrap keys)
 		authed := v1.Group("")
 		authed.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
+		authed.Use(middleware.Audit())
 		{
 			// Bootstrap-key-accessible endpoints
 			authed.GET("/me", s.HandleMe)
@@ -97,17 +99,27 @@ func NewRouter(s *Server) *gin.Engine {
 				full.GET("/conversations/:id", s.HandleGetConversation)
 			full.PUT("/conversations/:id", s.HandleUpdateConversation)
 
-				// Participants
+				// Participants & lifecycle
 				full.POST("/conversations/:id/participants", s.HandleAddParticipant)
 				full.DELETE("/conversations/:id/participants/:entityId", s.HandleRemoveParticipant)
 				full.PUT("/conversations/:id/subscription", s.HandleUpdateSubscription)
 				full.POST("/conversations/:id/read", s.HandleMarkAsRead)
+				full.POST("/conversations/:id/leave", s.HandleLeaveConversation)
+				full.POST("/conversations/:id/archive", s.HandleArchiveConversation)
+				full.POST("/conversations/:id/unarchive", s.HandleUnarchiveConversation)
 
 				// Messages
 				full.POST("/messages/send", s.HandleSendMessage)
 				full.DELETE("/messages/:id", s.HandleRevokeMessage)
+				full.PUT("/messages/:id", s.HandleEditMessage)
+				full.POST("/messages/:id/respond", s.HandleInteractionResponse)
 				full.GET("/conversations/:id/messages", s.HandleListMessages)
 				full.GET("/conversations/:id/search", s.HandleSearchMessages)
+
+				// Invite links
+				full.POST("/conversations/:id/invite", s.HandleCreateInviteLink)
+				full.GET("/conversations/:id/invites", s.HandleListInviteLinks)
+				full.DELETE("/invites/:id", s.HandleDeleteInviteLink)
 
 				// File upload
 				full.POST("/files/upload", s.HandleFileUpload)
@@ -115,6 +127,10 @@ func NewRouter(s *Server) *gin.Engine {
 				// Push notifications
 				full.POST("/push/subscribe", s.HandleRegisterPush)
 				full.POST("/push/unsubscribe", s.HandleUnregisterPush)
+
+				// Invite join
+				full.GET("/invite/:code", s.HandleGetInviteInfo)
+				full.POST("/invite/:code/join", s.HandleJoinViaInvite)
 
 				// Long polling
 				full.GET("/updates", s.HandleUpdates)

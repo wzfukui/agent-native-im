@@ -31,10 +31,15 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	// Verify participant
+	// Verify participant and check observer role
 	ok, err := s.Store.IsParticipant(ctx, req.ConversationID, entityID)
 	if err != nil || !ok {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+	participant, err := s.Store.GetParticipant(ctx, req.ConversationID, entityID)
+	if err == nil && participant != nil && participant.Role == model.RoleObserver {
+		Fail(c, http.StatusForbidden, "observers cannot send messages")
 		return
 	}
 
@@ -180,6 +185,130 @@ func (s *Server) HandleSearchMessages(c *gin.Context) {
 		"messages": msgs,
 		"query":    query,
 	})
+}
+
+// HandleInteractionResponse records a user's response to an interaction message.
+func (s *Server) HandleInteractionResponse(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid message id")
+		return
+	}
+
+	var req struct {
+		Value string `json:"value" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, "value is required")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	msg, err := s.Store.GetMessageByID(ctx, msgID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "message not found")
+		return
+	}
+
+	// Verify the message has an interaction layer
+	if msg.Layers.Interaction == nil {
+		Fail(c, http.StatusBadRequest, "message has no interaction")
+		return
+	}
+
+	// Verify responder is a participant
+	ok, err := s.Store.IsParticipant(ctx, msg.ConversationID, entityID)
+	if err != nil || !ok {
+		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+
+	// Broadcast interaction response event
+	if s.Hub != nil {
+		responder, _ := s.Store.GetEntityByID(ctx, entityID)
+		responderName := "someone"
+		if responder != nil {
+			responderName = responder.DisplayName
+			if responderName == "" {
+				responderName = responder.Name
+			}
+		}
+		s.Hub.BroadcastEvent(msg.ConversationID, "message.interaction_response", map[string]interface{}{
+			"message_id":      msgID,
+			"conversation_id": msg.ConversationID,
+			"entity_id":       entityID,
+			"entity_name":     responderName,
+			"value":           req.Value,
+			"responded_at":    time.Now(),
+		})
+	}
+
+	OK(c, http.StatusOK, gin.H{"message_id": msgID, "value": req.Value})
+}
+
+// HandleEditMessage allows the sender to edit their own message within 5 minutes.
+func (s *Server) HandleEditMessage(c *gin.Context) {
+	msgID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid message id")
+		return
+	}
+
+	var req struct {
+		Layers model.MessageLayers `json:"layers"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	msg, err := s.Store.GetMessageByID(ctx, msgID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "message not found")
+		return
+	}
+
+	if msg.SenderID != entityID {
+		Fail(c, http.StatusForbidden, "can only edit your own messages")
+		return
+	}
+
+	if msg.RevokedAt != nil {
+		Fail(c, http.StatusBadRequest, "cannot edit revoked message")
+		return
+	}
+
+	if time.Since(msg.CreatedAt) > 5*time.Minute {
+		Fail(c, http.StatusForbidden, "edit window expired (5 minutes)")
+		return
+	}
+
+	// Update the message layers
+	msg.Layers = req.Layers
+
+	if err := s.Store.UpdateMessage(ctx, msg); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to edit message")
+		return
+	}
+
+	// Broadcast edit event
+	if s.Hub != nil {
+		sender, _ := s.Store.GetEntityByID(ctx, entityID)
+		if sender != nil {
+			msg.SenderType = string(sender.EntityType)
+			msg.Sender = sender
+		}
+		s.Hub.BroadcastEvent(msg.ConversationID, "message.updated", map[string]interface{}{
+			"message": msg,
+		})
+	}
+
+	OK(c, http.StatusOK, msg)
 }
 
 func (s *Server) HandleListMessages(c *gin.Context) {

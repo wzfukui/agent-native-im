@@ -16,6 +16,7 @@ type Store interface {
 	MessageStore
 	WebhookStore
 	PushStore
+	InviteStore
 	StatsStore
 	io.Closer
 }
@@ -70,6 +71,9 @@ type ParticipantStore interface {
 	UpdateSubscriptionWithContext(ctx context.Context, conversationID, entityID int64, mode model.SubscriptionMode, contextWindow int) error
 	MarkAsRead(ctx context.Context, conversationID, entityID, messageID int64) error
 	GetUnreadCounts(ctx context.Context, entityID int64) (map[int64]int, error)
+	UpdateParticipantRole(ctx context.Context, conversationID, entityID int64, role model.ParticipantRole) error
+	ArchiveConversation(ctx context.Context, conversationID, entityID int64) error
+	UnarchiveConversation(ctx context.Context, conversationID, entityID int64) error
 }
 
 type MessageStore interface {
@@ -79,6 +83,15 @@ type MessageStore interface {
 	SearchMessages(ctx context.Context, conversationID int64, query string, limit int) ([]*model.Message, error)
 	GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error)
 	RevokeMessage(ctx context.Context, messageID int64) error
+	UpdateMessage(ctx context.Context, msg *model.Message) error
+}
+
+type InviteStore interface {
+	CreateInviteLink(ctx context.Context, link *model.InviteLink) error
+	GetInviteLinkByCode(ctx context.Context, code string) (*model.InviteLink, error)
+	ListInviteLinks(ctx context.Context, conversationID int64) ([]*model.InviteLink, error)
+	IncrementInviteUseCount(ctx context.Context, code string) error
+	DeleteInviteLink(ctx context.Context, id int64) error
 }
 
 type WebhookStore interface {

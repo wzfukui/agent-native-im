@@ -56,6 +56,14 @@ func (s *PGStore) RevokeMessage(ctx context.Context, messageID int64) error {
 	return err
 }
 
+func (s *PGStore) UpdateMessage(ctx context.Context, msg *model.Message) error {
+	_, err := s.DB.NewUpdate().Model(msg).
+		Column("layers").
+		Where("id = ?", msg.ID).
+		Exec(ctx)
+	return err
+}
+
 func (s *PGStore) GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error) {
 	var msgs []*model.Message
 	err := s.DB.NewSelect().Model(&msgs).

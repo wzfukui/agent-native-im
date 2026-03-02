@@ -36,6 +36,7 @@ type Participant struct {
 	LastReadMessageID int64           `bun:"last_read_message_id,notnull,default:0" json:"last_read_message_id"`
 	JoinedAt         time.Time        `bun:"joined_at,nullzero,notnull,default:now()" json:"joined_at"`
 	LeftAt           *time.Time       `bun:"left_at" json:"left_at,omitempty"`
+	ArchivedAt       *time.Time       `bun:"archived_at" json:"archived_at,omitempty"`
 
 	Entity       *Entity       `bun:"rel:belongs-to,join:entity_id=id" json:"entity,omitempty"`
 	Conversation *Conversation `bun:"rel:belongs-to,join:conversation_id=id" json:"-"`

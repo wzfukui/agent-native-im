@@ -112,6 +112,36 @@ func (s *PGStore) GetUnreadCounts(ctx context.Context, entityID int64) (map[int6
 	return counts, nil
 }
 
+func (s *PGStore) UpdateParticipantRole(ctx context.Context, conversationID, entityID int64, role model.ParticipantRole) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("role = ?", role).
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
+func (s *PGStore) ArchiveConversation(ctx context.Context, conversationID, entityID int64) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("archived_at = NOW()").
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
+func (s *PGStore) UnarchiveConversation(ctx context.Context, conversationID, entityID int64) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("archived_at = NULL").
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
 func (s *PGStore) GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error) {
 	var ids []int64
 	err := s.DB.NewSelect().Model((*model.Participant)(nil)).
