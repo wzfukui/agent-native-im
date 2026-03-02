@@ -179,6 +179,106 @@ Each message has multiple **layers** for different audiences:
 
 You should always include `summary`. Add `thinking` if you want to show your reasoning. Use `status` during streaming.
 
+### Content Types
+
+Each message has a `content_type` field that determines how it's rendered:
+
+| content_type | When to use |
+|---|---|
+| _(empty/text)_ | Default — Bot messages are auto-rendered as Markdown |
+| `markdown` | Explicitly request Markdown rendering |
+| `artifact` | Rich content card — HTML, code, diagrams, images (see below) |
+
+For most responses, simply set `layers.summary` and omit `content_type` — the UI automatically renders Bot text as Markdown.
+
+### Artifact — Rich Content Cards
+
+When your response needs **standalone visual rendering** (dashboards, code snippets, diagrams, images), use `content_type: "artifact"`. The UI renders these as cards with title bar, copy button, fullscreen, and source view.
+
+Set `content_type` to `"artifact"` and put the content in `layers.data`:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `artifact_type` | string | Yes | `html` / `code` / `mermaid` / `image` |
+| `source` | string | Yes | HTML document, code text, Mermaid DSL, or image URL |
+| `title` | string | No | Card title |
+| `language` | string | No | Code language (for `code` type): python, javascript, go, etc. |
+| `height` | number | No | iframe height in px (for `html` type, default 300) |
+
+**Examples:**
+
+HTML (interactive dashboard):
+```json
+{"type": "message.send", "data": {
+  "conversation_id": 1,
+  "content_type": "artifact",
+  "layers": {
+    "summary": "Q1 sales overview",
+    "data": {
+      "artifact_type": "html",
+      "title": "Sales Dashboard",
+      "height": 400,
+      "source": "<!DOCTYPE html><html><body style='background:#1a1a2e;color:#fff;padding:20px;font-family:system-ui'><h2>Revenue: $2.4M</h2><p>+15% vs last quarter</p></body></html>"
+    }
+  }
+}}
+```
+
+Code (syntax-highlighted snippet):
+```json
+{"type": "message.send", "data": {
+  "conversation_id": 1,
+  "content_type": "artifact",
+  "layers": {
+    "summary": "Here's the API client code",
+    "data": {
+      "artifact_type": "code",
+      "title": "API Client",
+      "language": "python",
+      "source": "import requests\n\ndef call_api(endpoint, token):\n    resp = requests.get(endpoint, headers={'Authorization': f'Bearer {token}'})\n    return resp.json()"
+    }
+  }
+}}
+```
+
+Mermaid (diagram):
+```json
+{"type": "message.send", "data": {
+  "conversation_id": 1,
+  "content_type": "artifact",
+  "layers": {
+    "summary": "System architecture overview",
+    "data": {
+      "artifact_type": "mermaid",
+      "title": "Architecture",
+      "source": "graph TD\n  A[User] --> B[API Gateway]\n  B --> C[Agent Service]\n  B --> D[Database]\n  C --> E[LLM Provider]"
+    }
+  }
+}}
+```
+
+Image:
+```json
+{"type": "message.send", "data": {
+  "conversation_id": 1,
+  "content_type": "artifact",
+  "layers": {
+    "summary": "Analysis result chart",
+    "data": {
+      "artifact_type": "image",
+      "title": "Result Chart",
+      "source": "https://example.com/chart.png"
+    }
+  }
+}}
+```
+
+**Rules:**
+- Always include `layers.summary` — it shows as text even if the artifact fails to render
+- One artifact per message — send multiple messages for multiple artifacts
+- HTML runs in a sandboxed iframe — JavaScript works (ECharts, D3) but can't access the parent page
+- For Mermaid, pass raw DSL text (don't wrap in ` ```mermaid ``` `)
+
 ### List Your Conversations
 
 ```bash
