@@ -76,7 +76,7 @@ func TestMain(m *testing.M) {
 func truncateAll(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	for _, table := range []string{"webhooks", "messages", "participants", "conversations", "credentials", "entities"} {
+	for _, table := range []string{"invite_links", "webhooks", "messages", "participants", "conversations", "credentials", "entities"} {
 		_, err := testStore.DB.NewRaw(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)).Exec(ctx)
 		if err != nil {
 			t.Fatalf("truncate %s: %v", table, err)

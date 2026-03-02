@@ -282,10 +282,41 @@ while True:
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
 | GET | `/api/v1/ping` | None | Health check |
-| GET | `/api/v1/bot/me` | Bot | Bot info |
-| GET | `/api/v1/conversations` | Bot | List conversations |
-| GET | `/api/v1/conversations/:id` | Bot | Conversation detail |
-| GET | `/api/v1/conversations/:id/messages` | Bot | Message history |
-| POST | `/api/v1/messages/send` | Bot | Send message |
-| GET | `/api/v1/updates` | Bot | Long polling |
-| WS | `/api/v1/ws?token=<token>` | Bot | WebSocket |
+| GET | `/api/v1/me` | Any | Entity info |
+| POST | `/api/v1/auth/login` | None | Login (returns JWT) |
+| POST | `/api/v1/auth/register` | None | Register |
+| POST | `/api/v1/auth/refresh` | Any | Refresh JWT token |
+| PUT | `/api/v1/me` | Full | Update profile |
+| PUT | `/api/v1/me/password` | Full | Change password |
+| GET | `/api/v1/conversations` | Full | List conversations |
+| GET | `/api/v1/conversations/:id` | Full | Conversation detail |
+| POST | `/api/v1/conversations` | Full | Create conversation |
+| PUT | `/api/v1/conversations/:id` | Full | Update title/description |
+| POST | `/api/v1/conversations/:id/leave` | Full | Leave conversation |
+| POST | `/api/v1/conversations/:id/archive` | Full | Archive conversation |
+| POST | `/api/v1/conversations/:id/unarchive` | Full | Unarchive conversation |
+| POST | `/api/v1/conversations/:id/participants` | Full | Add participant |
+| DELETE | `/api/v1/conversations/:id/participants/:eid` | Full | Remove participant |
+| PUT | `/api/v1/conversations/:id/subscription` | Full | Update subscription mode |
+| POST | `/api/v1/conversations/:id/read` | Full | Mark as read |
+| GET | `/api/v1/conversations/:id/messages` | Full | Message history |
+| GET | `/api/v1/conversations/:id/search` | Full | Search messages |
+| POST | `/api/v1/messages/send` | Full | Send message |
+| DELETE | `/api/v1/messages/:id` | Full | Revoke message |
+| PUT | `/api/v1/messages/:id` | Full | Edit message |
+| POST | `/api/v1/messages/:id/respond` | Full | Interaction response |
+| POST | `/api/v1/conversations/:id/invite` | Full | Create invite link |
+| GET | `/api/v1/conversations/:id/invites` | Full | List invite links |
+| GET | `/api/v1/invite/:code` | Full | Get invite info |
+| POST | `/api/v1/invite/:code/join` | Full | Join via invite |
+| DELETE | `/api/v1/invites/:id` | Full | Delete invite link |
+| POST | `/api/v1/entities` | Full | Create bot |
+| GET | `/api/v1/entities` | Full | List entities |
+| PUT | `/api/v1/entities/:id` | Full | Update entity |
+| DELETE | `/api/v1/entities/:id` | Full | Delete entity |
+| POST | `/api/v1/entities/:id/approve` | Full | Approve connection |
+| GET | `/api/v1/entities/:id/status` | Full | Entity status |
+| POST | `/api/v1/presence/batch` | Full | Batch presence query |
+| POST | `/api/v1/files/upload` | Full | Upload file |
+| GET | `/api/v1/updates` | Full | Long polling |
+| WS | `/api/v1/ws?token=<token>` | Any | WebSocket |
