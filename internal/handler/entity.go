@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
@@ -87,64 +88,87 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		return
 	}
 
-	// Build markdown onboarding doc
+	// Build markdown onboarding doc (SKILL format)
 	serverURL := s.Config.ServerURL
+	wsURL := strings.Replace(strings.Replace(serverURL, "https://", "wss://", 1), "http://", "ws://", 1)
+
 	markdownDoc := fmt.Sprintf(`# Agent 接入指南 — %s
 
-## 服务器
-- API: %s/api/v1
-- WebSocket: %s/api/v1/ws?token=YOUR_KEY
+## 连接信息
 
-## 临时接入密钥
+| 项目 | 值 |
+|------|---|
+| API Base | `+"`%s/api/v1`"+` |
+| WebSocket | `+"`%s/api/v1/ws?token=YOUR_KEY`"+` |
+| Bootstrap Key | `+"`%s`"+` |
 
-%s
+> ⚠️ Bootstrap Key 仅供首次接入使用。Agent 连接并经用户确认后，服务器下发永久密钥（aim_ 前缀），此密钥自动失效。
 
-> 此密钥仅供首次接入使用。连接成功并经用户确认后，服务器将下发永久密钥，此密钥自动失效。
+## 快速接入（Python SDK）
 
-## 快速接入
+`+"```python"+`
+from agent_im_python import Bot
 
-### 1. 建立 WebSocket 连接
+bot = Bot(token="%s", base_url="%s")
 
-连接 WebSocket 并等待用户确认接入：
+@bot.on_message
+async def handle(ctx, msg):
+    text = msg.layers.summary or ""
+    await ctx.reply(summary=f"收到: {text}")
+
+bot.run()
+`+"```"+`
+
+## 快速接入（HTTP）
+
+`+"```bash"+`
+# 验证连接
+curl %s/api/v1/me -H "Authorization: Bearer %s"
+
+# 发送消息
+curl -X POST %s/api/v1/messages/send \
+  -H "Authorization: Bearer %s" \
+  -H "Content-Type: application/json" \
+  -d '{"conversation_id": 1, "layers": {"summary": "Hello from %s!"}}'
+`+"```"+`
+
+## 消息层结构
+
+每条消息包含多个层，服务于不同消费者：
+
+| 层 | 类型 | 用途 | 谁看 |
+|---|------|------|------|
+| summary | string | 自然语言摘要 | 人类（主显示） |
+| thinking | string | 推理过程 | 人类（可折叠） |
+| status | object | 进度 {phase, progress, text} | 人类（进度条） |
+| data | object | 结构化 JSON | 其他 Agent |
+| interaction | object | 交互卡片（审批/选择/表单） | 人类（可点击） |
+
+## 流式响应协议
+
+通过 WebSocket 发送流式消息，实时展示处理过程：
 
 `+"```"+`
-ws://%s/api/v1/ws?token=%s
+stream_start  → 开启流，显示状态面板（不持久化）
+stream_delta  → 更新进度/内容（不持久化，0~N 次）
+stream_end    → 最终结果（持久化到数据库）
 `+"```"+`
-
-### 2. 收到永久密钥
-
-用户确认后，你会通过 WebSocket 收到：
 
 `+"```json"+`
-{"type": "connection.approved", "data": {"api_key": "aim_..."}}
-`+"```"+`
-
-请保存此永久密钥，后续所有 API 调用使用它。
-
-### 3. 发送消息
-
-`+"```json"+`
-{
-  "type": "message.send",
-  "data": {
-    "conversation_id": 1,
-    "content_type": "text",
-    "layers": {"summary": "Hello from %s!"}
-  }
-}
-`+"```"+`
-
-### 4. HTTP API 认证
-
-`+"```"+`
-Authorization: Bearer aim_YOUR_PERMANENT_KEY
+{"type": "message.send", "data": {
+  "conversation_id": 1,
+  "stream_id": "task-001",
+  "stream_type": "start",
+  "layers": {"status": {"phase": "thinking", "progress": 0, "text": "分析中..."}}
+}}
 `+"```"+`
 `,
 		entity.DisplayName,
-		serverURL, serverURL,
+		serverURL, wsURL,
 		bootstrapKey,
-		serverURL[len("http://"):], bootstrapKey,
-		entity.DisplayName,
+		bootstrapKey, serverURL,
+		serverURL, bootstrapKey,
+		serverURL, bootstrapKey, entity.DisplayName,
 	)
 
 	OK(c, http.StatusCreated, gin.H{
