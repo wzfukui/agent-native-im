@@ -224,9 +224,14 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
-	if err != nil || !ok {
+	// Only owner/admin can add participants
+	caller, err := s.Store.GetParticipant(ctx, convID, entityID)
+	if err != nil || caller == nil {
 		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		return
+	}
+	if caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin {
+		Fail(c, http.StatusForbidden, "only owner or admin can add participants")
 		return
 	}
 
@@ -235,15 +240,6 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 		role = model.RoleAdmin
 	} else if req.Role == "observer" {
 		role = model.RoleObserver
-	}
-
-	// Only owner/admin can assign admin/observer role
-	if role == model.RoleAdmin || role == model.RoleObserver {
-		caller, err := s.Store.GetParticipant(ctx, convID, entityID)
-		if err != nil || caller == nil || (caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin) {
-			Fail(c, http.StatusForbidden, "only owner or admin can assign this role")
-			return
-		}
 	}
 
 	if err := s.Store.AddParticipant(ctx, &model.Participant{
