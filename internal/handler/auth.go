@@ -23,14 +23,14 @@ func (s *Server) HandleLogin(c *gin.Context) {
 
 	entity, err := s.Store.GetEntityByName(c.Request.Context(), req.Username, model.EntityUser)
 	if err != nil {
-		Fail(c, http.StatusUnauthorized, "invalid credentials")
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid credentials")
 		return
 	}
 
 	// Look up password credential for this entity
 	creds, err := s.Store.GetCredentialsByEntity(c.Request.Context(), entity.ID, model.CredPassword)
 	if err != nil || len(creds) == 0 {
-		Fail(c, http.StatusUnauthorized, "invalid credentials")
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid credentials")
 		return
 	}
 
@@ -43,7 +43,7 @@ func (s *Server) HandleLogin(c *gin.Context) {
 	}
 
 	if !matched {
-		Fail(c, http.StatusUnauthorized, "invalid credentials")
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid credentials")
 		return
 	}
 
@@ -64,7 +64,7 @@ func (s *Server) HandleMe(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	entity, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 	OK(c, http.StatusOK, entity)
@@ -105,7 +105,7 @@ func (s *Server) HandleUpdateProfile(c *gin.Context) {
 
 	entity, err := s.Store.GetEntityByID(ctx, entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *Server) HandleUpdateProfile(c *gin.Context) {
 // HandleChangePassword changes the authenticated user's password.
 func (s *Server) HandleChangePassword(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can change passwords")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can change passwords")
 		return
 	}
 
@@ -186,7 +186,7 @@ func (s *Server) HandleChangePassword(c *gin.Context) {
 // HandleCreateUser creates a new user entity with a password credential. Admin only.
 func (s *Server) HandleCreateUser(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can create users")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can create users")
 		return
 	}
 
@@ -220,7 +220,7 @@ func (s *Server) HandleCreateUser(c *gin.Context) {
 	}
 
 	if err := s.Store.CreateEntity(ctx, entity); err != nil {
-		Fail(c, http.StatusConflict, "username already exists or creation failed")
+		FailWithCode(c, http.StatusConflict, ErrCodeDuplicateUser, "username already exists or creation failed")
 		return
 	}
 
@@ -266,7 +266,7 @@ func (s *Server) HandleRegister(c *gin.Context) {
 	// Check if username already exists
 	existing, err := s.Store.GetEntityByName(c.Request.Context(), req.Username, model.EntityUser)
 	if err == nil && existing != nil {
-		Fail(c, http.StatusConflict, "username already exists")
+		FailWithCode(c, http.StatusConflict, ErrCodeDuplicateUser, "username already exists")
 		return
 	}
 
@@ -285,7 +285,7 @@ func (s *Server) HandleRegister(c *gin.Context) {
 	}
 
 	if err := s.Store.CreateEntity(ctx, entity); err != nil {
-		Fail(c, http.StatusConflict, "username already exists or creation failed")
+		FailWithCode(c, http.StatusConflict, ErrCodeDuplicateUser, "username already exists or creation failed")
 		return
 	}
 

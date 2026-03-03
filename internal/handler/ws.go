@@ -24,7 +24,7 @@ var upgrader = gorillaWs.Upgrader{
 func (s *Server) HandleWS(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
-		Fail(c, http.StatusUnauthorized, "token required as query parameter")
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required as query parameter")
 		return
 	}
 
@@ -39,7 +39,7 @@ func (s *Server) HandleWS(c *gin.Context) {
 		// Try API key
 		cred, err := auth.ResolveAPIKey(c.Request.Context(), s.Store, token)
 		if err != nil {
-			Fail(c, http.StatusUnauthorized, "invalid token")
+			FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid token")
 			return
 		}
 		entityID = cred.EntityID

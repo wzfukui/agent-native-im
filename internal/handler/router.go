@@ -36,6 +36,7 @@ type Server struct {
 
 func NewRouter(s *Server) *gin.Engine {
 	r := gin.Default()
+	r.Use(middleware.RequestID())
 	r.Use(corsMiddleware())
 
 	v1 := r.Group("/api/v1")

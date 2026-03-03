@@ -34,12 +34,12 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 	// Verify participant and check observer role
 	ok, err := s.Store.IsParticipant(ctx, req.ConversationID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 	participant, err := s.Store.GetParticipant(ctx, req.ConversationID, entityID)
 	if err == nil && participant != nil && participant.Role == model.RoleObserver {
-		Fail(c, http.StatusForbidden, "observers cannot send messages")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermObserver, "observers cannot send messages")
 		return
 	}
 
@@ -110,22 +110,22 @@ func (s *Server) HandleRevokeMessage(c *gin.Context) {
 
 	msg, err := s.Store.GetMessageByID(ctx, msgID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "message not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeMessageNotFound, "message not found")
 		return
 	}
 
 	if msg.SenderID != entityID {
-		Fail(c, http.StatusForbidden, "can only revoke your own messages")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "can only revoke your own messages")
 		return
 	}
 
 	if msg.RevokedAt != nil {
-		Fail(c, http.StatusBadRequest, "message already revoked")
+		FailWithCode(c, http.StatusBadRequest, ErrCodeAlreadyRevoked, "message already revoked")
 		return
 	}
 
 	if time.Since(msg.CreatedAt) > revokeWindow {
-		Fail(c, http.StatusForbidden, "revoke window expired (2 minutes)")
+		FailWithCode(c, http.StatusForbidden, ErrCodeStateExpired, "revoke window expired (2 minutes)")
 		return
 	}
 
@@ -158,7 +158,7 @@ func (s *Server) HandleSearchMessages(c *gin.Context) {
 
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
@@ -211,7 +211,7 @@ func (s *Server) HandleInteractionResponse(c *gin.Context) {
 
 	msg, err := s.Store.GetMessageByID(ctx, msgID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "message not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeMessageNotFound, "message not found")
 		return
 	}
 
@@ -224,7 +224,7 @@ func (s *Server) HandleInteractionResponse(c *gin.Context) {
 	// Verify responder is a participant
 	ok, err := s.Store.IsParticipant(ctx, msg.ConversationID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
@@ -272,22 +272,22 @@ func (s *Server) HandleEditMessage(c *gin.Context) {
 
 	msg, err := s.Store.GetMessageByID(ctx, msgID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "message not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeMessageNotFound, "message not found")
 		return
 	}
 
 	if msg.SenderID != entityID {
-		Fail(c, http.StatusForbidden, "can only edit your own messages")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "can only edit your own messages")
 		return
 	}
 
 	if msg.RevokedAt != nil {
-		Fail(c, http.StatusBadRequest, "cannot edit revoked message")
+		FailWithCode(c, http.StatusBadRequest, ErrCodeStateBadTransition, "cannot edit revoked message")
 		return
 	}
 
 	if time.Since(msg.CreatedAt) > 5*time.Minute {
-		Fail(c, http.StatusForbidden, "edit window expired (5 minutes)")
+		FailWithCode(c, http.StatusForbidden, ErrCodeStateExpired, "edit window expired (5 minutes)")
 		return
 	}
 
@@ -327,7 +327,7 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 	// Verify participant
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 

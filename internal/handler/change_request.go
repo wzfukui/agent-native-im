@@ -23,7 +23,7 @@ func (s *Server) HandleCreateChangeRequest(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -39,7 +39,7 @@ func (s *Server) HandleCreateChangeRequest(c *gin.Context) {
 	// Get old value
 	conv, err := s.Store.GetConversation(ctx, convID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "conversation not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeConvNotFound, "conversation not found")
 		return
 	}
 
@@ -101,7 +101,7 @@ func (s *Server) HandleListChangeRequests(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -152,13 +152,13 @@ func (s *Server) resolveChangeRequest(c *gin.Context, approved bool) {
 	// Only owner can approve/reject
 	p, err := s.Store.GetParticipant(ctx, convID, entityID)
 	if err != nil || p == nil || p.Role != model.RoleOwner {
-		Fail(c, http.StatusForbidden, "only owner can approve or reject change requests")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "only owner can approve or reject change requests")
 		return
 	}
 
 	cr, err := s.Store.GetChangeRequest(ctx, reqID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "change request not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeNotFound, "change request not found")
 		return
 	}
 
@@ -168,7 +168,7 @@ func (s *Server) resolveChangeRequest(c *gin.Context, approved bool) {
 	}
 
 	if cr.Status != model.CRPending {
-		Fail(c, http.StatusConflict, "change request already resolved")
+		FailWithCode(c, http.StatusConflict, ErrCodeAlreadyResolved, "change request already resolved")
 		return
 	}
 

@@ -61,7 +61,7 @@ func (s *Server) HandleAdminUpdateUser(c *gin.Context) {
 	ctx := c.Request.Context()
 	target, err := s.Store.GetEntityByID(ctx, entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 

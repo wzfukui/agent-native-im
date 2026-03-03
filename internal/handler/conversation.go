@@ -167,7 +167,7 @@ func (s *Server) HandleMarkAsRead(c *gin.Context) {
 
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -191,13 +191,13 @@ func (s *Server) HandleGetConversation(c *gin.Context) {
 
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
 	conv, err := s.Store.GetConversation(ctx, convID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "conversation not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeConvNotFound, "conversation not found")
 		return
 	}
 
@@ -227,11 +227,11 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 	// Only owner/admin can add participants
 	caller, err := s.Store.GetParticipant(ctx, convID, entityID)
 	if err != nil || caller == nil {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 	if caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin {
-		Fail(c, http.StatusForbidden, "only owner or admin can add participants")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "only owner or admin can add participants")
 		return
 	}
 
@@ -309,7 +309,7 @@ func (s *Server) HandleUpdateSubscription(c *gin.Context) {
 
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
@@ -347,13 +347,13 @@ func (s *Server) HandleRemoveParticipant(c *gin.Context) {
 
 	caller, err := s.Store.GetParticipant(ctx, convID, entityID)
 	if err != nil || caller == nil {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
 	if targetID != entityID {
 		if caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin {
-			Fail(c, http.StatusForbidden, "only owner or admin can remove other participants")
+			FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "only owner or admin can remove other participants")
 			return
 		}
 	}
@@ -415,13 +415,13 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
 	conv, err := s.Store.GetConversation(ctx, convID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "conversation not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeConvNotFound, "conversation not found")
 		return
 	}
 
@@ -429,7 +429,7 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 	if conv.ConvType == model.ConvGroup || conv.ConvType == model.ConvChannel {
 		participant, err := s.Store.GetParticipant(ctx, convID, entityID)
 		if err != nil || (participant.Role != model.RoleOwner && participant.Role != model.RoleAdmin) {
-			Fail(c, http.StatusForbidden, "only owner or admin can update this conversation")
+			FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "only owner or admin can update this conversation")
 			return
 		}
 	}
@@ -488,7 +488,7 @@ func (s *Server) HandleLeaveConversation(c *gin.Context) {
 
 	participant, err := s.Store.GetParticipant(ctx, convID, entityID)
 	if err != nil || participant == nil {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
@@ -550,7 +550,7 @@ func (s *Server) HandleArchiveConversation(c *gin.Context) {
 
 	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
 	if err != nil || !ok {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 
@@ -576,7 +576,7 @@ func (s *Server) HandleUnarchiveConversation(c *gin.Context) {
 	// Use raw check since archived convs are excluded from normal participant check
 	p, err := s.Store.GetParticipant(ctx, convID, entityID)
 	if err != nil || p == nil {
-		Fail(c, http.StatusForbidden, "not a participant of this conversation")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
 

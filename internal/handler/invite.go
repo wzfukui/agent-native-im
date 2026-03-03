@@ -30,11 +30,11 @@ func (s *Server) HandleCreateInviteLink(c *gin.Context) {
 	// Check participant and role
 	p, err := s.Store.GetParticipant(c, convID, entityID)
 	if err != nil || p == nil {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 	if p.Role != model.RoleOwner && p.Role != model.RoleAdmin {
-		Fail(c, http.StatusForbidden, "only owner/admin can create invite links")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "only owner/admin can create invite links")
 		return
 	}
 
@@ -75,7 +75,7 @@ func (s *Server) HandleListInviteLinks(c *gin.Context) {
 	// Check participant
 	ok, _ := s.Store.IsParticipant(c, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -96,18 +96,18 @@ func (s *Server) HandleGetInviteInfo(c *gin.Context) {
 	code := c.Param("code")
 	link, err := s.Store.GetInviteLinkByCode(c, code)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "invite link not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeInviteNotFound, "invite link not found")
 		return
 	}
 
 	// Check expiry
 	if link.ExpiresAt != nil && time.Now().After(*link.ExpiresAt) {
-		Fail(c, http.StatusGone, "invite link expired")
+		FailWithCode(c, http.StatusGone, ErrCodeStateExpired, "invite link expired")
 		return
 	}
 	// Check max uses
 	if link.MaxUses > 0 && link.UseCount >= link.MaxUses {
-		Fail(c, http.StatusGone, "invite link max uses reached")
+		FailWithCode(c, http.StatusGone, ErrCodeStateLimitReached, "invite link max uses reached")
 		return
 	}
 
@@ -126,24 +126,24 @@ func (s *Server) HandleJoinViaInvite(c *gin.Context) {
 
 	link, err := s.Store.GetInviteLinkByCode(c, code)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "invite link not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeInviteNotFound, "invite link not found")
 		return
 	}
 
 	// Validate
 	if link.ExpiresAt != nil && time.Now().After(*link.ExpiresAt) {
-		Fail(c, http.StatusGone, "invite link expired")
+		FailWithCode(c, http.StatusGone, ErrCodeStateExpired, "invite link expired")
 		return
 	}
 	if link.MaxUses > 0 && link.UseCount >= link.MaxUses {
-		Fail(c, http.StatusGone, "invite link max uses reached")
+		FailWithCode(c, http.StatusGone, ErrCodeStateLimitReached, "invite link max uses reached")
 		return
 	}
 
 	// Check if already participant
 	already, _ := s.Store.IsParticipant(c, link.ConversationID, entityID)
 	if already {
-		Fail(c, http.StatusConflict, "already a participant")
+		FailWithCode(c, http.StatusConflict, ErrCodeAlreadyMember, "already a participant")
 		return
 	}
 
@@ -200,7 +200,7 @@ func (s *Server) HandleDeleteInviteLink(c *gin.Context) {
 	// Look up the invite link to verify authorization
 	link, err := s.Store.GetInviteLinkByID(c, id)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "invite link not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeInviteNotFound, "invite link not found")
 		return
 	}
 
@@ -208,7 +208,7 @@ func (s *Server) HandleDeleteInviteLink(c *gin.Context) {
 	if link.CreatedBy != entityID {
 		p, err := s.Store.GetParticipant(c, link.ConversationID, entityID)
 		if err != nil || p == nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
-			Fail(c, http.StatusForbidden, "only creator or admin can delete invite links")
+			FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only creator or admin can delete invite links")
 			return
 		}
 	}

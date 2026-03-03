@@ -22,7 +22,7 @@ func (s *Server) HandleListMemories(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -61,7 +61,7 @@ func (s *Server) HandleUpsertMemory(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -117,7 +117,7 @@ func (s *Server) HandleDeleteMemory(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 

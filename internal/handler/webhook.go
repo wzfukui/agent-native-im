@@ -69,11 +69,11 @@ func (s *Server) HandleDeleteWebhook(c *gin.Context) {
 	// Verify ownership
 	wh, err := s.Store.GetWebhookByID(ctx, whID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "webhook not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeWebhookNotFound, "webhook not found")
 		return
 	}
 	if wh.EntityID != entityID {
-		Fail(c, http.StatusForbidden, "not the owner of this webhook")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this webhook")
 		return
 	}
 

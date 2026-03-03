@@ -193,7 +193,7 @@ func TestAddParticipantAdminRoleElevation(t *testing.T) {
 	})
 	assertStatus(t, resp, http.StatusCreated)
 
-	// Member adds another entity as regular member — should succeed
+	// Member tries to add another entity as regular member — should be forbidden (only owner/admin can add)
 	resp = doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "regular-bot"})
 	assertStatus(t, resp, http.StatusCreated)
 	botData2 := parseOK(t, resp)
@@ -203,7 +203,7 @@ func TestAddParticipantAdminRoleElevation(t *testing.T) {
 	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/participants", convID), ptr(memberToken), map[string]interface{}{
 		"entity_id": botID2,
 	})
-	assertStatus(t, resp, http.StatusCreated)
+	assertStatus(t, resp, http.StatusForbidden)
 }
 
 func TestUpdateSubscription(t *testing.T) {

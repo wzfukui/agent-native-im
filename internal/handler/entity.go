@@ -40,13 +40,13 @@ func generateKey(prefix string) string {
 // For bots/services, it generates a bootstrap key (aimb_ prefix) instead of a permanent key.
 func (s *Server) HandleCreateEntity(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can create entities")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can create entities")
 		return
 	}
 
 	var req createEntityRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		Fail(c, http.StatusBadRequest, "name is required")
+		FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "name is required")
 		return
 	}
 
@@ -77,7 +77,7 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	}
 
 	if err := s.Store.CreateEntity(c.Request.Context(), entity); err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to create entity")
+		FailFromDB(c, err, "failed to create entity")
 		return
 	}
 
@@ -93,7 +93,7 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	}
 
 	if err := s.Store.CreateCredential(c.Request.Context(), cred); err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to create credential")
+		FailFromDB(c, err, "failed to create credential")
 		return
 	}
 
@@ -272,7 +272,7 @@ curl %s/api/v1/skill-template?format=text
 // It generates a permanent API key, deletes the bootstrap key, and pushes the new key via WebSocket.
 func (s *Server) HandleApproveConnection(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can approve connections")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can approve connections")
 		return
 	}
 
@@ -285,12 +285,12 @@ func (s *Server) HandleApproveConnection(c *gin.Context) {
 	// Verify ownership
 	target, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
 	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
-		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this entity")
 		return
 	}
 
@@ -341,7 +341,7 @@ func (s *Server) HandleEntityStatus(c *gin.Context) {
 
 	entity, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
@@ -355,7 +355,7 @@ func (s *Server) HandleEntityStatus(c *gin.Context) {
 // HandleGetCredentials returns credential status for a bot/service entity.
 func (s *Server) HandleGetCredentials(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can view credentials")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can view credentials")
 		return
 	}
 
@@ -368,12 +368,12 @@ func (s *Server) HandleGetCredentials(c *gin.Context) {
 	ctx := c.Request.Context()
 	target, err := s.Store.GetEntityByID(ctx, entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
 	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
-		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this entity")
 		return
 	}
 
@@ -427,7 +427,7 @@ func (s *Server) HandleKickDevice(c *gin.Context) {
 
 	n := s.Hub.DisconnectDevice(entityID, deviceID)
 	if n == 0 {
-		Fail(c, http.StatusNotFound, "device not found or already disconnected")
+		FailWithCode(c, http.StatusNotFound, ErrCodeDeviceNotFound, "device not found or already disconnected")
 		return
 	}
 
@@ -437,7 +437,7 @@ func (s *Server) HandleKickDevice(c *gin.Context) {
 // HandleListEntities lists entities owned by the authenticated user, with online status.
 func (s *Server) HandleListEntities(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can list owned entities")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can list owned entities")
 		return
 	}
 
@@ -466,7 +466,7 @@ func (s *Server) HandleListEntities(c *gin.Context) {
 // HandleUpdateEntity updates an entity's display name, description, or metadata.
 func (s *Server) HandleUpdateEntity(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can update entities")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can update entities")
 		return
 	}
 
@@ -488,12 +488,12 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 	ctx := c.Request.Context()
 	target, err := s.Store.GetEntityByID(ctx, entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
 	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
-		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this entity")
 		return
 	}
 
@@ -531,7 +531,7 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 // HandleDeleteEntity soft-deletes an entity owned by the authenticated user.
 func (s *Server) HandleDeleteEntity(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can delete entities")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can delete entities")
 		return
 	}
 
@@ -544,12 +544,12 @@ func (s *Server) HandleDeleteEntity(c *gin.Context) {
 	// Verify ownership
 	target, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
 	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
-		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this entity")
 		return
 	}
 
@@ -564,7 +564,7 @@ func (s *Server) HandleDeleteEntity(c *gin.Context) {
 // HandleReactivateEntity re-enables a disabled entity.
 func (s *Server) HandleReactivateEntity(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		Fail(c, http.StatusForbidden, "only users can reactivate entities")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can reactivate entities")
 		return
 	}
 
@@ -576,17 +576,17 @@ func (s *Server) HandleReactivateEntity(c *gin.Context) {
 
 	target, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "entity not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
 
 	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
-		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this entity")
 		return
 	}
 
 	if target.Status != "disabled" {
-		Fail(c, http.StatusBadRequest, "entity is not disabled")
+		FailWithCode(c, http.StatusBadRequest, ErrCodeStateBadTransition, "entity is not disabled")
 		return
 	}
 

@@ -24,7 +24,7 @@ func (s *Server) HandleCreateTask(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -106,7 +106,7 @@ func (s *Server) HandleListTasks(c *gin.Context) {
 
 	ok, _ := s.Store.IsParticipant(ctx, convID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -144,13 +144,13 @@ func (s *Server) HandleGetTask(c *gin.Context) {
 
 	task, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "task not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeTaskNotFound, "task not found")
 		return
 	}
 
 	ok, _ := s.Store.IsParticipant(ctx, task.ConversationID, entityID)
 	if !ok {
-		Fail(c, http.StatusForbidden, "not a participant")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant")
 		return
 	}
 
@@ -176,7 +176,7 @@ func (s *Server) HandleUpdateTask(c *gin.Context) {
 
 	task, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "task not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeTaskNotFound, "task not found")
 		return
 	}
 
@@ -186,7 +186,7 @@ func (s *Server) HandleUpdateTask(c *gin.Context) {
 	if !isCreator && !isAssignee {
 		p, err := s.Store.GetParticipant(ctx, task.ConversationID, entityID)
 		if err != nil || p == nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
-			Fail(c, http.StatusForbidden, "only creator, assignee, or admin can update this task")
+			FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only creator, assignee, or admin can update this task")
 			return
 		}
 	}
@@ -279,7 +279,7 @@ func (s *Server) HandleDeleteTask(c *gin.Context) {
 
 	task, err := s.Store.GetTask(ctx, taskID)
 	if err != nil {
-		Fail(c, http.StatusNotFound, "task not found")
+		FailWithCode(c, http.StatusNotFound, ErrCodeTaskNotFound, "task not found")
 		return
 	}
 
@@ -287,7 +287,7 @@ func (s *Server) HandleDeleteTask(c *gin.Context) {
 	if task.CreatedBy != entityID {
 		p, err := s.Store.GetParticipant(ctx, task.ConversationID, entityID)
 		if err != nil || p == nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
-			Fail(c, http.StatusForbidden, "only creator or admin can delete this task")
+			FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only creator or admin can delete this task")
 			return
 		}
 	}
