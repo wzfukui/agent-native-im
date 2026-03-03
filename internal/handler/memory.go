@@ -31,6 +31,9 @@ func (s *Server) HandleListMemories(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to list memories")
 		return
 	}
+	if mems == nil {
+		mems = []*model.ConversationMemory{}
+	}
 
 	// Also return conversation prompt
 	conv, _ := s.Store.GetConversation(ctx, convID)

@@ -111,6 +111,9 @@ func (s *Server) HandleListChangeRequests(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to list change requests")
 		return
 	}
+	if crs == nil {
+		crs = []*model.ChangeRequest{}
+	}
 
 	// Enrich with requester info
 	for _, cr := range crs {

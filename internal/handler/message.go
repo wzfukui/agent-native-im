@@ -180,6 +180,9 @@ func (s *Server) HandleSearchMessages(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "search failed")
 		return
 	}
+	if msgs == nil {
+		msgs = []*model.Message{}
+	}
 
 	OK(c, http.StatusOK, gin.H{
 		"messages": msgs,
@@ -358,6 +361,9 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 		}
 	}
 
+	if msgs == nil {
+		msgs = []*model.Message{}
+	}
 	hasMore := len(msgs) == limit
 
 	OK(c, http.StatusOK, gin.H{

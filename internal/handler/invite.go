@@ -84,6 +84,9 @@ func (s *Server) HandleListInviteLinks(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to list invite links")
 		return
 	}
+	if links == nil {
+		links = []*model.InviteLink{}
+	}
 
 	OK(c, http.StatusOK, links)
 }

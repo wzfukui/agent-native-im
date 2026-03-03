@@ -116,6 +116,9 @@ func (s *Server) HandleListTasks(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to list tasks")
 		return
 	}
+	if tasks == nil {
+		tasks = []*model.Task{}
+	}
 
 	// Enrich with assignees and creators
 	for _, t := range tasks {
