@@ -17,6 +17,10 @@ type Store interface {
 	WebhookStore
 	PushStore
 	InviteStore
+	TaskStore
+	MemoryStore
+	ChangeRequestStore
+	AuditStore
 	StatsStore
 	io.Closer
 }
@@ -100,4 +104,32 @@ type WebhookStore interface {
 	ListWebhooksByEntity(ctx context.Context, entityID int64) ([]*model.Webhook, error)
 	GetWebhooksForConversation(ctx context.Context, conversationID int64, event string) ([]*model.Webhook, error)
 	DeleteWebhook(ctx context.Context, id int64) error
+}
+
+type TaskStore interface {
+	CreateTask(ctx context.Context, task *model.Task) error
+	GetTask(ctx context.Context, id int64) (*model.Task, error)
+	ListTasksByConversation(ctx context.Context, conversationID int64, status string) ([]*model.Task, error)
+	UpdateTask(ctx context.Context, task *model.Task) error
+	DeleteTask(ctx context.Context, id int64) error
+}
+
+type MemoryStore interface {
+	CreateMemory(ctx context.Context, mem *model.ConversationMemory) error
+	GetMemory(ctx context.Context, conversationID int64, key string) (*model.ConversationMemory, error)
+	ListMemories(ctx context.Context, conversationID int64) ([]*model.ConversationMemory, error)
+	UpsertMemory(ctx context.Context, mem *model.ConversationMemory) error
+	DeleteMemory(ctx context.Context, id int64) error
+}
+
+type ChangeRequestStore interface {
+	CreateChangeRequest(ctx context.Context, cr *model.ChangeRequest) error
+	ListChangeRequests(ctx context.Context, conversationID int64, status string) ([]*model.ChangeRequest, error)
+	GetChangeRequest(ctx context.Context, id int64) (*model.ChangeRequest, error)
+	ResolveChangeRequest(ctx context.Context, id int64, approverID int64, approved bool) error
+}
+
+type AuditStore interface {
+	CreateAuditLog(ctx context.Context, log *model.AuditLog) error
+	ListAuditLogs(ctx context.Context, entityID *int64, action string, since string, limit, offset int) ([]*model.AuditLog, int, error)
 }

@@ -402,13 +402,14 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 	var req struct {
 		Title       *string `json:"title"`
 		Description *string `json:"description"`
+		Prompt      *string `json:"prompt"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if req.Title == nil && req.Description == nil {
+	if req.Title == nil && req.Description == nil && req.Prompt == nil {
 		Fail(c, http.StatusBadRequest, "nothing to update")
 		return
 	}
@@ -450,6 +451,10 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 		conv.Description = *req.Description
 		summaryParts = append(summaryParts, fmt.Sprintf("%s 修改了群描述", senderName))
 	}
+	if req.Prompt != nil {
+		conv.Prompt = *req.Prompt
+		summaryParts = append(summaryParts, fmt.Sprintf("%s 更新了会话提示词", senderName))
+	}
 
 	if err := s.Store.UpdateConversation(ctx, conv); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to update conversation")
@@ -466,6 +471,7 @@ func (s *Server) HandleUpdateConversation(c *gin.Context) {
 			"conversation_id": convID,
 			"title":           conv.Title,
 			"description":     conv.Description,
+			"prompt":          conv.Prompt,
 			"updated_by":      entityID,
 		})
 	}

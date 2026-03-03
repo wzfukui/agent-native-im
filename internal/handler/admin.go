@@ -136,3 +136,35 @@ func (s *Server) HandleAdminListConversations(c *gin.Context) {
 		"offset":        offset,
 	})
 }
+
+// HandleAdminListAuditLogs returns audit log entries with filtering.
+func (s *Server) HandleAdminListAuditLogs(c *gin.Context) {
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "50"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+
+	var entityID *int64
+	if eidStr := c.Query("entity_id"); eidStr != "" {
+		eid, err := strconv.ParseInt(eidStr, 10, 64)
+		if err == nil {
+			entityID = &eid
+		}
+	}
+	action := c.Query("action")
+	since := c.Query("since")
+
+	logs, total, err := s.Store.ListAuditLogs(c.Request.Context(), entityID, action, since, limit, offset)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to list audit logs")
+		return
+	}
+
+	OK(c, http.StatusOK, gin.H{
+		"logs":   logs,
+		"total":  total,
+		"limit":  limit,
+		"offset": offset,
+	})
+}

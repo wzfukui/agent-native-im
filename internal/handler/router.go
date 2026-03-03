@@ -52,7 +52,7 @@ func NewRouter(s *Server) *gin.Engine {
 		// Authenticated (any entity type, including bootstrap keys)
 		authed := v1.Group("")
 		authed.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
-		authed.Use(middleware.Audit())
+		authed.Use(middleware.Audit(s.Store))
 		{
 			// Bootstrap-key-accessible endpoints
 			authed.GET("/me", s.HandleMe)
@@ -78,6 +78,7 @@ func NewRouter(s *Server) *gin.Engine {
 					admin.DELETE("/admin/users/:id", s.HandleAdminDeleteUser)
 					admin.GET("/admin/stats", s.HandleAdminStats)
 					admin.GET("/admin/conversations", s.HandleAdminListConversations)
+					admin.GET("/admin/audit-logs", s.HandleAdminListAuditLogs)
 				}
 				// Entity management (user-only at handler level)
 				full.POST("/entities", s.HandleCreateEntity)
@@ -131,6 +132,24 @@ func NewRouter(s *Server) *gin.Engine {
 				// Invite join
 				full.GET("/invite/:code", s.HandleGetInviteInfo)
 				full.POST("/invite/:code/join", s.HandleJoinViaInvite)
+
+				// Tasks
+				full.POST("/conversations/:id/tasks", s.HandleCreateTask)
+				full.GET("/conversations/:id/tasks", s.HandleListTasks)
+				full.GET("/tasks/:taskId", s.HandleGetTask)
+				full.PUT("/tasks/:taskId", s.HandleUpdateTask)
+				full.DELETE("/tasks/:taskId", s.HandleDeleteTask)
+
+				// Memories
+				full.GET("/conversations/:id/memories", s.HandleListMemories)
+				full.POST("/conversations/:id/memories", s.HandleUpsertMemory)
+				full.DELETE("/conversations/:id/memories/:memId", s.HandleDeleteMemory)
+
+				// Change Requests
+				full.POST("/conversations/:id/change-requests", s.HandleCreateChangeRequest)
+				full.GET("/conversations/:id/change-requests", s.HandleListChangeRequests)
+				full.POST("/conversations/:id/change-requests/:reqId/approve", s.HandleApproveChangeRequest)
+				full.POST("/conversations/:id/change-requests/:reqId/reject", s.HandleRejectChangeRequest)
 
 				// Long polling
 				full.GET("/updates", s.HandleUpdates)
