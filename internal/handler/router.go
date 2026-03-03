@@ -67,6 +67,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.PUT("/me/password", s.HandleChangePassword)
 
 				full.GET("/me/devices", s.HandleListDevices)
+				full.DELETE("/me/devices/:deviceId", s.HandleKickDevice)
 
 			// Admin-only endpoints
 				admin := full.Group("")

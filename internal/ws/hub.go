@@ -107,6 +107,24 @@ func (h *Hub) GetConnectedDevices(entityID int64) []DeviceInfo {
 	return devices
 }
 
+// DisconnectDevice closes all WebSocket connections for a specific device of an entity.
+// Returns the number of connections closed.
+func (h *Hub) DisconnectDevice(entityID int64, deviceID string) int {
+	h.mu.RLock()
+	var targets []*Client
+	for client := range h.clients {
+		if client.entityID == entityID && client.deviceID == deviceID {
+			targets = append(targets, client)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, client := range targets {
+		h.unregister <- client
+	}
+	return len(targets)
+}
+
 // ConnectionCount returns the total number of active WebSocket connections.
 func (h *Hub) ConnectionCount() int {
 	h.mu.RLock()

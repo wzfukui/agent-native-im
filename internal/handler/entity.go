@@ -367,6 +367,24 @@ func (s *Server) HandleListDevices(c *gin.Context) {
 	OK(c, http.StatusOK, gin.H{"devices": devices})
 }
 
+// HandleKickDevice disconnects a specific device of the current entity.
+func (s *Server) HandleKickDevice(c *gin.Context) {
+	entityID := auth.GetEntityID(c)
+	deviceID := c.Param("deviceId")
+	if deviceID == "" {
+		Fail(c, http.StatusBadRequest, "device_id is required")
+		return
+	}
+
+	n := s.Hub.DisconnectDevice(entityID, deviceID)
+	if n == 0 {
+		Fail(c, http.StatusNotFound, "device not found or already disconnected")
+		return
+	}
+
+	OK(c, http.StatusOK, gin.H{"disconnected": n})
+}
+
 // HandleListEntities lists entities owned by the authenticated user, with online status.
 func (s *Server) HandleListEntities(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
