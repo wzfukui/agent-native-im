@@ -125,6 +125,24 @@ func (h *Hub) DisconnectDevice(entityID int64, deviceID string) int {
 	return len(targets)
 }
 
+// DisconnectEntity closes all WebSocket connections for an entity.
+// Returns the number of connections closed.
+func (h *Hub) DisconnectEntity(entityID int64) int {
+	h.mu.RLock()
+	var targets []*Client
+	for client := range h.clients {
+		if client.entityID == entityID {
+			targets = append(targets, client)
+		}
+	}
+	h.mu.RUnlock()
+
+	for _, client := range targets {
+		h.unregister <- client
+	}
+	return len(targets)
+}
+
 // ConnectionCount returns the total number of active WebSocket connections.
 func (h *Hub) ConnectionCount() int {
 	h.mu.RLock()
@@ -428,7 +446,8 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 	}
 
 	// Notify long-polling waiters for all participants except the sender
-	h.notifyParticipantWaiters(msg.ConversationID, msg.SenderID)
+	// Use the already-fetched participant list to avoid duplicate query
+	h.notifyParticipantWaitersWithList(participants, msg.SenderID)
 
 	// Send push notifications to offline human users
 	if h.OnPush != nil {
@@ -598,7 +617,11 @@ func (h *Hub) notifyParticipantWaiters(conversationID, senderID int64) {
 	if err != nil {
 		return
 	}
+	h.notifyParticipantWaitersWithList(participants, senderID)
+}
 
+// notifyParticipantWaitersWithList is an optimized version that uses a pre-fetched participant list
+func (h *Hub) notifyParticipantWaitersWithList(participants []*model.Participant, senderID int64) {
 	h.waiterMu.Lock()
 	defer h.waiterMu.Unlock()
 

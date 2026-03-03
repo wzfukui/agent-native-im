@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -502,7 +503,23 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 		target.DisplayName = *req.DisplayName
 	}
 	if req.AvatarURL != nil {
-		target.AvatarURL = *req.AvatarURL
+		// Validate avatar URL
+		avatarURL := *req.AvatarURL
+		if avatarURL != "" {
+			// Must be http(s) or data: URL, max 500 chars
+			if len(avatarURL) > 500 {
+				FailWithCode(c, http.StatusBadRequest, ErrCodeValidationFormat, "avatar URL too long (max 500 chars)")
+				return
+			}
+			// Check for dangerous schemes
+			if !strings.HasPrefix(avatarURL, "http://") &&
+			   !strings.HasPrefix(avatarURL, "https://") &&
+			   !strings.HasPrefix(avatarURL, "data:image/") {
+				FailWithCode(c, http.StatusBadRequest, ErrCodeValidationFormat, "invalid avatar URL scheme")
+				return
+			}
+		}
+		target.AvatarURL = avatarURL
 	}
 	if req.Metadata != nil {
 		// Merge new metadata into existing
@@ -562,6 +579,14 @@ func (s *Server) HandleDeleteEntity(c *gin.Context) {
 		return
 	}
 
+	// Disconnect all WebSocket connections for the disabled entity
+	if s.Hub != nil {
+		count := s.Hub.DisconnectEntity(entityID)
+		if count > 0 {
+			log.Printf("handler: disconnected %d websocket connections for disabled entity %d", count, entityID)
+		}
+	}
+
 	OK(c, http.StatusOK, "entity deleted")
 }
 
@@ -599,6 +624,12 @@ func (s *Server) HandleReactivateEntity(c *gin.Context) {
 		return
 	}
 
-	target.Status = "active"
-	OK(c, http.StatusOK, target)
+	// Fetch fresh entity to get updated timestamp
+	fresh, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to fetch reactivated entity")
+		return
+	}
+
+	OK(c, http.StatusOK, fresh)
 }

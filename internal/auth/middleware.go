@@ -51,6 +51,12 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 		if err == nil {
 			entity, err := st.GetEntityByID(c.Request.Context(), cred.EntityID)
 			if err == nil {
+				// Check if entity is disabled
+				if entity.Status == "disabled" {
+					fail(c, http.StatusForbidden, "entity is disabled")
+					c.Abort()
+					return
+				}
 				c.Set("entityID", entity.ID)
 				c.Set("entityType", entity.EntityType)
 				if cred.CredType == model.CredBootstrap {
