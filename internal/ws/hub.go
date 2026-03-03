@@ -340,11 +340,13 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 	subModes := make(map[int64]model.SubscriptionMode)
 	entityTypes := make(map[int64]model.EntityType)
 	contextWindows := make(map[int64]int)
+	entityStatuses := make(map[int64]string)
 	for _, p := range participants {
 		subModes[p.EntityID] = p.SubscriptionMode
 		contextWindows[p.EntityID] = p.ContextWindow
 		if p.Entity != nil {
 			entityTypes[p.EntityID] = p.Entity.EntityType
+			entityStatuses[p.EntityID] = p.Entity.Status
 		}
 	}
 
@@ -359,6 +361,11 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			default:
 				log.Printf("ws: entity %d send buffer full (broadcast-sender), dropping", client.entityID)
 			}
+			continue
+		}
+
+		// Skip disabled entities
+		if entityStatuses[client.entityID] == "disabled" {
 			continue
 		}
 

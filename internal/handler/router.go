@@ -88,6 +88,8 @@ func NewRouter(s *Server) *gin.Engine {
 				full.DELETE("/entities/:id", s.HandleDeleteEntity)
 				full.POST("/entities/:id/approve", s.HandleApproveConnection)
 				full.GET("/entities/:id/status", s.HandleEntityStatus)
+				full.GET("/entities/:id/credentials", s.HandleGetCredentials)
+				full.POST("/entities/:id/reactivate", s.HandleReactivateEntity)
 				full.POST("/presence/batch", s.HandleBatchPresence)
 
 				// Webhook management

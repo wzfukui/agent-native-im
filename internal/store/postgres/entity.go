@@ -37,8 +37,7 @@ func (s *PGStore) ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*mo
 	var entities []*model.Entity
 	err := s.DB.NewSelect().Model(&entities).
 		Where("owner_id = ?", ownerID).
-		Where("status = ?", "active").
-		OrderExpr("created_at DESC").
+		OrderExpr("CASE WHEN status = 'active' THEN 0 ELSE 1 END, created_at DESC").
 		Scan(ctx)
 	return entities, err
 }
@@ -62,6 +61,15 @@ func (s *PGStore) ListAllEntities(ctx context.Context, limit, offset int) ([]*mo
 func (s *PGStore) DeleteEntity(ctx context.Context, id int64) error {
 	_, err := s.DB.NewUpdate().Model((*model.Entity)(nil)).
 		Set("status = ?", "disabled").
+		Set("updated_at = ?", time.Now()).
+		Where("id = ?", id).
+		Exec(ctx)
+	return err
+}
+
+func (s *PGStore) ReactivateEntity(ctx context.Context, id int64) error {
+	_, err := s.DB.NewUpdate().Model((*model.Entity)(nil)).
+		Set("status = ?", "active").
 		Set("updated_at = ?", time.Now()).
 		Where("id = ?", id).
 		Exec(ctx)

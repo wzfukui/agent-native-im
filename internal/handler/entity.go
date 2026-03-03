@@ -22,9 +22,10 @@ const (
 )
 
 type createEntityRequest struct {
-	Name        string `json:"name" binding:"required"`
-	DisplayName string `json:"display_name"`
-	EntityType  string `json:"entity_type"` // defaults to "bot"
+	Name        string                 `json:"name" binding:"required"`
+	DisplayName string                 `json:"display_name"`
+	EntityType  string                 `json:"entity_type"` // defaults to "bot"
+	Metadata    map[string]interface{} `json:"metadata"`
 }
 
 // generateKey creates a random API key with the given prefix.
@@ -66,6 +67,13 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		DisplayName: displayName,
 		Status:      "active",
 		OwnerID:     &ownerID,
+	}
+
+	if req.Metadata != nil {
+		metaJSON, err := json.Marshal(req.Metadata)
+		if err == nil {
+			entity.Metadata = metaJSON
+		}
 	}
 
 	if err := s.Store.CreateEntity(c.Request.Context(), entity); err != nil {
@@ -344,6 +352,47 @@ func (s *Server) HandleEntityStatus(c *gin.Context) {
 	})
 }
 
+// HandleGetCredentials returns credential status for a bot/service entity.
+func (s *Server) HandleGetCredentials(c *gin.Context) {
+	if auth.GetEntityType(c) != model.EntityUser {
+		Fail(c, http.StatusForbidden, "only users can view credentials")
+		return
+	}
+
+	entityID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid entity id")
+		return
+	}
+
+	ctx := c.Request.Context()
+	target, err := s.Store.GetEntityByID(ctx, entityID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "entity not found")
+		return
+	}
+
+	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
+		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		return
+	}
+
+	bootstrapCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredBootstrap)
+	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
+
+	bootstrapPrefix := ""
+	if len(bootstrapCreds) > 0 {
+		bootstrapPrefix = bootstrapCreds[0].RawPrefix
+	}
+
+	OK(c, http.StatusOK, gin.H{
+		"entity_id":        entityID,
+		"has_bootstrap":    len(bootstrapCreds) > 0,
+		"has_api_key":      len(apiKeyCreds) > 0,
+		"bootstrap_prefix": bootstrapPrefix,
+	})
+}
+
 // HandleBatchPresence returns online status for a batch of entity IDs.
 func (s *Server) HandleBatchPresence(c *gin.Context) {
 	var req struct {
@@ -510,4 +559,42 @@ func (s *Server) HandleDeleteEntity(c *gin.Context) {
 	}
 
 	OK(c, http.StatusOK, "entity deleted")
+}
+
+// HandleReactivateEntity re-enables a disabled entity.
+func (s *Server) HandleReactivateEntity(c *gin.Context) {
+	if auth.GetEntityType(c) != model.EntityUser {
+		Fail(c, http.StatusForbidden, "only users can reactivate entities")
+		return
+	}
+
+	entityID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid entity id")
+		return
+	}
+
+	target, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "entity not found")
+		return
+	}
+
+	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
+		Fail(c, http.StatusForbidden, "not the owner of this entity")
+		return
+	}
+
+	if target.Status != "disabled" {
+		Fail(c, http.StatusBadRequest, "entity is not disabled")
+		return
+	}
+
+	if err := s.Store.ReactivateEntity(c.Request.Context(), entityID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to reactivate entity")
+		return
+	}
+
+	target.Status = "active"
+	OK(c, http.StatusOK, target)
 }

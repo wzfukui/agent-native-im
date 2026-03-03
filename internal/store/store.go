@@ -43,6 +43,7 @@ type EntityStore interface {
 	ListAllEntities(ctx context.Context, limit, offset int) ([]*model.Entity, int, error)
 	UpdateEntity(ctx context.Context, entity *model.Entity) error
 	DeleteEntity(ctx context.Context, id int64) error
+	ReactivateEntity(ctx context.Context, id int64) error
 }
 
 type CredentialStore interface {
