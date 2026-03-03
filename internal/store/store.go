@@ -60,6 +60,7 @@ type ConversationStore interface {
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	GetConversation(ctx context.Context, id int64) (*model.Conversation, error)
 	ListConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error)
+	ListArchivedConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error)
 	ListAllConversations(ctx context.Context, limit, offset int) ([]*model.Conversation, int, error)
 	TouchConversation(ctx context.Context, id int64) error
 	UpdateConversation(ctx context.Context, conv *model.Conversation) error

@@ -478,6 +478,7 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 
 	var req struct {
 		DisplayName *string                `json:"display_name"`
+		AvatarURL   *string                `json:"avatar_url"`
 		Metadata    map[string]interface{} `json:"metadata"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -499,6 +500,9 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 
 	if req.DisplayName != nil {
 		target.DisplayName = *req.DisplayName
+	}
+	if req.AvatarURL != nil {
+		target.AvatarURL = *req.AvatarURL
 	}
 	if req.Metadata != nil {
 		// Merge new metadata into existing

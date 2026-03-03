@@ -39,6 +39,20 @@ func (s *PGStore) ListConversationsByEntity(ctx context.Context, entityID int64)
 	return convs, err
 }
 
+func (s *PGStore) ListArchivedConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error) {
+	var convs []*model.Conversation
+	err := s.DB.NewSelect().Model(&convs).
+		Join("JOIN participants AS p ON p.conversation_id = conversation.id").
+		Where("p.entity_id = ?", entityID).
+		Where("p.left_at IS NULL").
+		Where("p.archived_at IS NOT NULL").
+		Relation("Participants").
+		Relation("Participants.Entity").
+		OrderExpr("conversation.updated_at DESC").
+		Scan(ctx)
+	return convs, err
+}
+
 func (s *PGStore) ListAllConversations(ctx context.Context, limit, offset int) ([]*model.Conversation, int, error) {
 	var convs []*model.Conversation
 	count, err := s.DB.NewSelect().Model(&convs).

@@ -125,7 +125,13 @@ func (s *Server) HandleListConversations(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
-	convs, err := s.Store.ListConversationsByEntity(ctx, entityID)
+	var convs []*model.Conversation
+	var err error
+	if c.Query("archived") == "true" {
+		convs, err = s.Store.ListArchivedConversationsByEntity(ctx, entityID)
+	} else {
+		convs, err = s.Store.ListConversationsByEntity(ctx, entityID)
+	}
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to list conversations")
 		return
