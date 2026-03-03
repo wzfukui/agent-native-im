@@ -77,7 +77,7 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 
 	// Populate sender info
 	sender, err := s.Store.GetEntityByID(ctx, entityID)
-	if err == nil {
+	if err == nil && sender != nil {
 		msg.SenderType = string(sender.EntityType)
 		msg.Sender = sender
 	}

@@ -163,7 +163,9 @@ func (s *Server) HandleJoinViaInvite(c *gin.Context) {
 	s.Store.IncrementInviteUseCount(c, code)
 
 	// Subscribe to WS
-	s.Hub.SubscribeEntity(link.ConversationID, entityID)
+	if s.Hub != nil {
+		s.Hub.SubscribeEntity(link.ConversationID, entityID)
+	}
 
 	// System message
 	ent, _ := s.Store.GetEntityByID(c, entityID)
@@ -174,17 +176,19 @@ func (s *Server) HandleJoinViaInvite(c *gin.Context) {
 	s.broadcastSystemMessage(c, link.ConversationID, entityID, name+" joined via invite link")
 
 	// Broadcast update
-	s.Hub.BroadcastEvent(link.ConversationID, "conversation.updated", map[string]interface{}{
-		"conversation_id": link.ConversationID,
-		"action":          "member_joined",
-		"entity_id":       entityID,
-	})
+	if s.Hub != nil {
+		s.Hub.BroadcastEvent(link.ConversationID, "conversation.updated", map[string]interface{}{
+			"conversation_id": link.ConversationID,
+			"action":          "member_joined",
+			"entity_id":       entityID,
+		})
+	}
 
 	conv, _ := s.Store.GetConversation(c, link.ConversationID)
 	OK(c, http.StatusOK, conv)
 }
 
-// DELETE /invite/:id
+// DELETE /invites/:id
 func (s *Server) HandleDeleteInviteLink(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
@@ -193,9 +197,22 @@ func (s *Server) HandleDeleteInviteLink(c *gin.Context) {
 		return
 	}
 
-	// Only creator or conv owner can delete
-	// For simplicity, just delete
-	_ = entityID
+	// Look up the invite link to verify authorization
+	link, err := s.Store.GetInviteLinkByID(c, id)
+	if err != nil {
+		Fail(c, http.StatusNotFound, "invite link not found")
+		return
+	}
+
+	// Only the creator or conversation owner/admin can delete
+	if link.CreatedBy != entityID {
+		p, err := s.Store.GetParticipant(c, link.ConversationID, entityID)
+		if err != nil || p == nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
+			Fail(c, http.StatusForbidden, "only creator or admin can delete invite links")
+			return
+		}
+	}
+
 	if err := s.Store.DeleteInviteLink(c, id); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to delete")
 		return

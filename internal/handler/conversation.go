@@ -240,7 +240,7 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 	// Only owner/admin can assign admin/observer role
 	if role == model.RoleAdmin || role == model.RoleObserver {
 		caller, err := s.Store.GetParticipant(ctx, convID, entityID)
-		if err != nil || (caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin) {
+		if err != nil || caller == nil || (caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin) {
 			Fail(c, http.StatusForbidden, "only owner or admin can assign this role")
 			return
 		}

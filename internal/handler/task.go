@@ -185,7 +185,7 @@ func (s *Server) HandleUpdateTask(c *gin.Context) {
 	isAssignee := task.AssigneeID != nil && *task.AssigneeID == entityID
 	if !isCreator && !isAssignee {
 		p, err := s.Store.GetParticipant(ctx, task.ConversationID, entityID)
-		if err != nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
+		if err != nil || p == nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
 			Fail(c, http.StatusForbidden, "only creator, assignee, or admin can update this task")
 			return
 		}
@@ -286,7 +286,7 @@ func (s *Server) HandleDeleteTask(c *gin.Context) {
 	// Permission: creator or owner/admin
 	if task.CreatedBy != entityID {
 		p, err := s.Store.GetParticipant(ctx, task.ConversationID, entityID)
-		if err != nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
+		if err != nil || p == nil || (p.Role != model.RoleOwner && p.Role != model.RoleAdmin) {
 			Fail(c, http.StatusForbidden, "only creator or admin can delete this task")
 			return
 		}

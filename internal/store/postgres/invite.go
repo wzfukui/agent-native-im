@@ -20,6 +20,15 @@ func (s *PGStore) GetInviteLinkByCode(ctx context.Context, code string) (*model.
 	return link, nil
 }
 
+func (s *PGStore) GetInviteLinkByID(ctx context.Context, id int64) (*model.InviteLink, error) {
+	link := new(model.InviteLink)
+	err := s.DB.NewSelect().Model(link).Where("id = ?", id).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return link, nil
+}
+
 func (s *PGStore) ListInviteLinks(ctx context.Context, conversationID int64) ([]*model.InviteLink, error) {
 	var links []*model.InviteLink
 	err := s.DB.NewSelect().Model(&links).

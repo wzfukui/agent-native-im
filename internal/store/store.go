@@ -93,6 +93,7 @@ type MessageStore interface {
 type InviteStore interface {
 	CreateInviteLink(ctx context.Context, link *model.InviteLink) error
 	GetInviteLinkByCode(ctx context.Context, code string) (*model.InviteLink, error)
+	GetInviteLinkByID(ctx context.Context, id int64) (*model.InviteLink, error)
 	ListInviteLinks(ctx context.Context, conversationID int64) ([]*model.InviteLink, error)
 	IncrementInviteUseCount(ctx context.Context, code string) error
 	DeleteInviteLink(ctx context.Context, id int64) error
