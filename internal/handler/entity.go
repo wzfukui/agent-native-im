@@ -109,7 +109,23 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	}
 
 	// Build markdown onboarding doc (SKILL format)
-	serverURL := s.Config.ServerURL
+	// Derive server URL dynamically from request headers
+	serverURL := s.Config.ServerURL // fallback
+	if origin := c.GetHeader("Origin"); origin != "" {
+		serverURL = origin
+	} else if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
+		host := c.GetHeader("X-Forwarded-Host")
+		if host == "" {
+			host = c.Request.Host
+		}
+		serverURL = fwdProto + "://" + host
+	} else if c.Request.Host != "" && serverURL == "http://localhost:9800" {
+		scheme := "http"
+		if c.Request.TLS != nil {
+			scheme = "https"
+		}
+		serverURL = scheme + "://" + c.Request.Host
+	}
 	wsURL := strings.Replace(strings.Replace(serverURL, "https://", "wss://", 1), "http://", "ws://", 1)
 
 	markdownDoc := fmt.Sprintf(`# Agent 接入指南 — %s
