@@ -524,7 +524,8 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 			// Check for dangerous schemes
 			if !strings.HasPrefix(avatarURL, "http://") &&
 			   !strings.HasPrefix(avatarURL, "https://") &&
-			   !strings.HasPrefix(avatarURL, "data:image/") {
+			   !strings.HasPrefix(avatarURL, "data:image/") &&
+			   !strings.HasPrefix(avatarURL, "/files/") {
 				FailWithCode(c, http.StatusBadRequest, ErrCodeValidationFormat, "invalid avatar URL scheme")
 				return
 			}
