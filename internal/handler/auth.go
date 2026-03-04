@@ -1,13 +1,52 @@
 package handler
 
 import (
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// validatePassword checks if a password meets security requirements
+func validatePassword(password string) error {
+	if len(password) < 8 {
+		return fmt.Errorf("password must be at least 8 characters")
+	}
+	if len(password) > 128 {
+		return fmt.Errorf("password must be less than 128 characters")
+	}
+
+	var hasUpper, hasLower, hasNumber bool
+	for _, char := range password {
+		switch {
+		case 'A' <= char && char <= 'Z':
+			hasUpper = true
+		case 'a' <= char && char <= 'z':
+			hasLower = true
+		case '0' <= char && char <= '9':
+			hasNumber = true
+		}
+	}
+
+	if !hasUpper || !hasLower || !hasNumber {
+		return fmt.Errorf("password must contain uppercase, lowercase, and numbers")
+	}
+
+	// Check for common weak passwords
+	lowerPass := strings.ToLower(password)
+	weakPasswords := []string{"password", "12345678", "qwerty", "admin", "letmein", "welcome", "123456"}
+	for _, weak := range weakPasswords {
+		if strings.Contains(lowerPass, weak) {
+			return fmt.Errorf("password is too common or weak")
+		}
+	}
+
+	return nil
+}
 
 type loginRequest struct {
 	Username string `json:"username" binding:"required"`
@@ -140,8 +179,9 @@ func (s *Server) HandleChangePassword(c *gin.Context) {
 		return
 	}
 
-	if len(req.NewPassword) < 6 {
-		Fail(c, http.StatusBadRequest, "new password must be at least 6 characters")
+	// Validate new password complexity
+	if err := validatePassword(req.NewPassword); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -200,8 +240,9 @@ func (s *Server) HandleCreateUser(c *gin.Context) {
 		return
 	}
 
-	if len(req.Password) < 6 {
-		Fail(c, http.StatusBadRequest, "password must be at least 6 characters")
+	// Validate password complexity
+	if err := validatePassword(req.Password); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
@@ -258,8 +299,9 @@ func (s *Server) HandleRegister(c *gin.Context) {
 		return
 	}
 
-	if len(req.Password) < 6 {
-		Fail(c, http.StatusBadRequest, "password must be at least 6 characters")
+	// Validate password complexity
+	if err := validatePassword(req.Password); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 

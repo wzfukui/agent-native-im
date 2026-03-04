@@ -69,6 +69,17 @@ func (s *Server) HandleAdminUpdateUser(c *gin.Context) {
 		target.DisplayName = *req.DisplayName
 	}
 	if req.Status != nil {
+		// Validate status value
+		validStatuses := map[string]bool{
+			"active":   true,
+			"disabled": true,
+			"pending":  true,
+		}
+		if !validStatuses[*req.Status] {
+			FailWithCode(c, http.StatusBadRequest, "VALIDATION_STATUS_INVALID",
+				"Invalid status value. Must be one of: active, disabled, pending")
+			return
+		}
 		target.Status = *req.Status
 	}
 

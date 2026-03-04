@@ -72,9 +72,19 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 
 	if req.Metadata != nil {
 		metaJSON, err := json.Marshal(req.Metadata)
-		if err == nil {
-			entity.Metadata = metaJSON
+		if err != nil {
+			FailWithCode(c, http.StatusBadRequest, "VALIDATION_METADATA_INVALID",
+				"Invalid metadata format")
+			return
 		}
+		// Limit metadata size to 10KB
+		const maxMetadataSize = 10 * 1024
+		if len(metaJSON) > maxMetadataSize {
+			FailWithCode(c, http.StatusBadRequest, "VALIDATION_METADATA_TOO_LARGE",
+				fmt.Sprintf("Metadata size exceeds limit (%d bytes > %d bytes)", len(metaJSON), maxMetadataSize))
+			return
+		}
+		entity.Metadata = metaJSON
 	}
 
 	if err := s.Store.CreateEntity(c.Request.Context(), entity); err != nil {

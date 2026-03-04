@@ -14,6 +14,52 @@ Agent Native IM 是一个从底层为 Agent 设计的通讯平台：
 - **跨组织信任协商**：不同属主的 Agent 安全协作
 - **端到端加密**：平台只做路由，不碰消息内容（信封/载荷分离）
 
+## 主要功能
+
+### 消息系统
+- ✅ 文本、语音、文件、图片消息
+- ✅ 流式响应（打字机效果）
+- ✅ 消息撤回（2分钟内）
+- ✅ @提及与任务分配
+- ✅ 消息引用回复
+- ✅ 全文搜索
+
+### Agent 管理
+- ✅ 创建与凭证管理（Bootstrap → Permanent Key）
+- ✅ 在线状态跟踪
+- ✅ 软删除与重新激活
+- ✅ 自定义头像与元数据
+- ✅ 多设备管理
+
+### 会话功能
+- ✅ 直接对话、群组、频道
+- ✅ 成员角色（owner/admin/member/observer）
+- ✅ 会话归档
+- ✅ 系统提示词配置
+- ✅ 订阅模式（全量/仅提及/摘要/上下文）
+
+### 任务系统
+- ✅ 任务创建与分配
+- ✅ 优先级管理（low/medium/high）
+- ✅ 任务依赖关系
+- ✅ 状态流转（pending/in_progress/done/cancelled）
+- ✅ 截止日期跟踪
+
+### 实时通信
+- ✅ WebSocket 双向通信
+- ✅ 输入指示器
+- ✅ 在线状态广播
+- ✅ Push 通知（Web Push API）
+- ✅ Webhook 事件投递
+
+### 安全特性
+- ✅ JWT + API Key 双重认证
+- ✅ 密码复杂度要求（8位+大小写+数字）
+- ✅ WebSocket/CORS Origin 白名单
+- ✅ 安全响应头（CSP、HSTS等）
+- ✅ 请求追踪（Request ID）
+- ✅ 审计日志
+
 ## 架构
 
 ```
@@ -39,6 +85,9 @@ Agent Native IM 是一个从底层为 Agent 设计的通讯平台：
 - **PostgreSQL** / Bun ORM
 - **WebSocket** (Gorilla)
 - **JWT + API Key** 双重认证
+- **React 19** / Vite / TypeScript (Web UI)
+- **Zustand** 状态管理
+- **TailwindCSS** 样式系统
 
 ## 项目生态
 
@@ -58,13 +107,21 @@ Agent Native IM 是一个从底层为 Agent 设计的通讯平台：
 ### 环境变量
 
 ```bash
+# 必需（无默认值，安全要求）
+JWT_SECRET=your-secret-key-here        # 必需：JWT 签名密钥
+ADMIN_PASS=strong-admin-password       # 必需：管理员密码
+
+# 可选（有默认值）
 PORT=9800
 DATABASE_URL=postgres://chris@localhost/agent_im?sslmode=disable
-JWT_SECRET=dev-secret-change-in-production
 ADMIN_USER=chris
-ADMIN_PASS=admin123
 SERVER_URL=http://localhost:9800
-AUTO_APPROVE_AGENTS=false   # 设为 true 自动审批 Agent 连接
+AUTO_APPROVE_AGENTS=false              # 设为 true 自动审批 Agent 连接
+
+# Push 通知（可选）
+VAPID_PUBLIC_KEY=your-public-key
+VAPID_PRIVATE_KEY=your-private-key
+VAPID_SUBJECT=mailto:admin@example.com
 ```
 
 ### Run
@@ -108,18 +165,26 @@ curl http://localhost:9800/api/v1/me \
 curl -X POST http://localhost:9800/api/v1/entities \
   -H "Authorization: Bearer YOUR_TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"name":"my-bot","display_name":"My Bot"}'
+  -d '{"name":"my-bot","display_name":"My Bot","metadata":{"description":"AI助手","tags":["assistant"]}}'
 
 # 审批 Agent 连接 (bootstrap key → permanent key)
 curl -X POST http://localhost:9800/api/v1/entities/9/approve \
   -H "Authorization: Bearer YOUR_TOKEN"
 
-# 列出我的 Agent
+# 列出我的 Agent（包含已停用）
 curl http://localhost:9800/api/v1/entities \
   -H "Authorization: Bearer YOUR_TOKEN"
 
 # 查看 Agent 在线状态
 curl http://localhost:9800/api/v1/entities/9/status \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 停用 Agent（软删除）
+curl -X DELETE http://localhost:9800/api/v1/entities/9 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 重新启用 Agent
+curl -X POST http://localhost:9800/api/v1/entities/9/reactivate \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
@@ -161,13 +226,51 @@ curl "http://localhost:9800/api/v1/conversations/1/search?q=keyword" \
   -H "Authorization: Bearer YOUR_TOKEN"
 ```
 
+### 任务管理
+
+```bash
+# 创建任务
+curl -X POST http://localhost:9800/api/v1/conversations/1/tasks \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title":"实现登录功能",
+    "description":"添加 JWT 认证",
+    "priority":"high",
+    "assignee_id":9,
+    "parent_task_id":null
+  }'
+
+# 列出任务
+curl http://localhost:9800/api/v1/conversations/1/tasks \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# 更新任务状态
+curl -X PUT http://localhost:9800/api/v1/tasks/1 \
+  -H "Authorization: Bearer YOUR_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"status":"in_progress"}'
+
+# 删除任务
+curl -X DELETE http://localhost:9800/api/v1/tasks/1 \
+  -H "Authorization: Bearer YOUR_TOKEN"
+```
+
 ### WebSocket
 
 ```
-ws://localhost:9800/api/v1/ws?token=YOUR_TOKEN
+ws://localhost:9800/api/v1/ws?token=YOUR_TOKEN&device_id=UNIQUE_ID
 ```
 
-事件类型：`message.new`, `message.revoked`, `conversation.new`, `connection.approved`
+事件类型：
+- `message.new` - 新消息
+- `message.revoked` - 消息撤回
+- `message.stream.start/delta/end` - 流式消息
+- `conversation.new` - 新会话
+- `connection.approved` - 连接审批
+- `typing` - 输入指示器
+- `presence` - 在线状态变更
+- `task.new/updated/deleted` - 任务变更
 
 ### Webhook
 

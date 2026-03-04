@@ -12,12 +12,37 @@ import (
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
+	"github.com/wzfukui/agent-native-im/internal/utils"
 	ws_pkg "github.com/wzfukui/agent-native-im/internal/ws"
 )
 
 var upgrader = gorillaWs.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		// Security: Whitelist allowed origins for WebSocket connections
+		origin := r.Header.Get("Origin")
+		allowedOrigins := []string{
+			"https://ani-web.51pwd.com",
+			"http://localhost:3000",     // Development
+			"http://localhost:5173",     // Vite dev server
+			"http://192.168.44.43:3000", // Local network testing
+			"http://127.0.0.1:3000",     // Alternative localhost
+			"http://127.0.0.1:5173",     // Alternative Vite
+		}
+
+		// Allow requests without origin header (same-origin or non-browser clients)
+		if origin == "" {
+			return true
+		}
+
+		// Check against whitelist
+		for _, allowed := range allowedOrigins {
+			if origin == allowed {
+				return true
+			}
+		}
+
+		log.Printf("WebSocket connection rejected from origin: %s", origin)
+		return false
 	},
 }
 
@@ -61,12 +86,15 @@ func (s *Server) HandleWS(c *gin.Context) {
 	client := ws_pkg.NewClient(s.Hub, conn, entityID, deviceID, deviceInfo)
 	s.Hub.Register(client)
 
-	go client.WritePump()
-	go client.ReadPump()
+	// Start WebSocket pumps with panic recovery
+	utils.SafeGo(fmt.Sprintf("ws-write-%d", entityID), client.WritePump)
+	utils.SafeGo(fmt.Sprintf("ws-read-%d", entityID), client.ReadPump)
 
 	// Auto-approve if configured and the agent connected with a bootstrap key
 	if isBootstrap && s.Config.AutoApproveAgents {
-		go s.autoApproveEntity(entityID)
+		utils.SafeGo(fmt.Sprintf("auto-approve-%d", entityID), func() {
+			s.autoApproveEntity(entityID)
+		})
 	}
 }
 

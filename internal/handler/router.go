@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"log"
 	"net/http"
 	"strings"
 
@@ -37,15 +38,21 @@ type Server struct {
 func NewRouter(s *Server) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.RequestID())
+	r.Use(securityHeaders())
 	r.Use(corsMiddleware())
+
+	// Create rate limiters
+	rateLimiters := middleware.CreateRateLimiters()
 
 	v1 := r.Group("/api/v1")
 	{
 		// Public
 		v1.GET("/ping", HandlePing)
 		v1.GET("/skill-template", HandleSkillTemplate)
-		v1.POST("/auth/login", s.HandleLogin)
-		v1.POST("/auth/register", s.HandleRegister)
+
+		// Auth endpoints with strict rate limiting
+		v1.POST("/auth/login", rateLimiters["login"].Middleware(), s.HandleLogin)
+		v1.POST("/auth/register", rateLimiters["register"].Middleware(), s.HandleRegister)
 
 		// Public push key endpoint (no auth needed)
 		v1.GET("/push/vapid-key", s.HandleGetVAPIDKey)
@@ -113,8 +120,8 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations/:id/archive", s.HandleArchiveConversation)
 				full.POST("/conversations/:id/unarchive", s.HandleUnarchiveConversation)
 
-				// Messages
-				full.POST("/messages/send", s.HandleSendMessage)
+				// Messages (with rate limiting)
+				full.POST("/messages/send", rateLimiters["message"].Middleware(), s.HandleSendMessage)
 				full.DELETE("/messages/:id", s.HandleRevokeMessage)
 				full.PUT("/messages/:id", s.HandleEditMessage)
 				full.POST("/messages/:id/respond", s.HandleInteractionResponse)
@@ -126,8 +133,8 @@ func NewRouter(s *Server) *gin.Engine {
 				full.GET("/conversations/:id/invites", s.HandleListInviteLinks)
 				full.DELETE("/invites/:id", s.HandleDeleteInviteLink)
 
-				// File upload
-				full.POST("/files/upload", s.HandleFileUpload)
+				// File upload (with rate limiting)
+				full.POST("/files/upload", rateLimiters["file"].Middleware(), s.HandleFileUpload)
 
 				// Push notifications
 				full.POST("/push/subscribe", s.HandleRegisterPush)
@@ -173,6 +180,16 @@ func NewRouter(s *Server) *gin.Engine {
 }
 
 func corsMiddleware() gin.HandlerFunc {
+	// Security: Whitelist of allowed origins
+	allowedOrigins := map[string]bool{
+		"https://ani-web.51pwd.com":  true,
+		"http://localhost:3000":       true, // Development
+		"http://localhost:5173":       true, // Vite dev server
+		"http://192.168.44.43:3000":   true, // Local network testing
+		"http://127.0.0.1:3000":       true, // Alternative localhost
+		"http://127.0.0.1:5173":       true, // Alternative Vite
+	}
+
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 
@@ -180,19 +197,61 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
 		c.Header("Access-Control-Max-Age", "86400")
 
-		if origin != "" {
-			// Specific origin: allow credentials
+		if origin != "" && allowedOrigins[origin] {
+			// Allowed origin: enable credentials
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
-		} else {
-			// No origin: wildcard without credentials
+		} else if origin == "" {
+			// No origin header (same-origin or non-browser): allow
 			c.Header("Access-Control-Allow-Origin", "*")
+		} else {
+			// Rejected origin: no CORS headers
+			log.Printf("CORS rejected for origin: %s", origin)
 		}
 
 		if strings.ToUpper(c.Request.Method) == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
+
+		c.Next()
+	}
+}
+
+// securityHeaders adds security-related HTTP headers to all responses
+func securityHeaders() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Prevent clickjacking attacks
+		c.Header("X-Frame-Options", "DENY")
+
+		// Prevent MIME type sniffing
+		c.Header("X-Content-Type-Options", "nosniff")
+
+		// Enable XSS protection in older browsers
+		c.Header("X-XSS-Protection", "1; mode=block")
+
+		// Enforce HTTPS (only for production)
+		if !strings.Contains(c.Request.Host, "localhost") && !strings.Contains(c.Request.Host, "127.0.0.1") {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+		}
+
+		// Content Security Policy - adjust based on your needs
+		// Allow self, data URIs for images (SVG avatars), and specific WebSocket origins
+		csp := "default-src 'self'; " +
+			"img-src 'self' data: https:; " +
+			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + // unsafe-eval needed for React dev tools
+			"style-src 'self' 'unsafe-inline'; " +
+			"connect-src 'self' wss://ani-web.51pwd.com ws://localhost:* ws://127.0.0.1:* ws://192.168.44.43:*; " +
+			"font-src 'self' data:; " +
+			"object-src 'none'; " +
+			"frame-ancestors 'none'"
+		c.Header("Content-Security-Policy", csp)
+
+		// Referrer policy
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+
+		// Permissions policy (replaces Feature-Policy)
+		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
 
 		c.Next()
 	}

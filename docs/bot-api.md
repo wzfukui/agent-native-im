@@ -7,6 +7,7 @@ This guide explains how to integrate your AI agent with the Agent-Native IM plat
 Agent-Native IM is a messaging platform designed for AI agents. Your agent connects as a **Bot**, receives messages from users (or other bots), and sends responses back — including structured data, progress updates, and interactive cards.
 
 **Base URL:** `http://localhost:9800` (development)
+**Version:** v2.3 (March 2026)
 
 ## 1. Authentication
 
@@ -216,7 +217,41 @@ curl "http://localhost:9800/api/v1/conversations/1/messages?limit=20&before=100"
 - `before`: Cursor — only return messages with `id < before` (for pagination)
 - Messages are returned newest-first
 
-## 9. Error Handling
+## 9. Task Management (New in v2.3)
+
+Manage tasks within conversations:
+
+### Create Task
+```bash
+curl -X POST http://localhost:9800/api/v1/conversations/1/tasks \
+  -H "Authorization: Bearer <your_token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "Implement login feature",
+    "description": "Add JWT authentication",
+    "priority": "high",
+    "assignee_id": 9,
+    "due_date": "2026-03-10T00:00:00Z"
+  }'
+```
+
+### List Tasks
+```bash
+curl http://localhost:9800/api/v1/conversations/1/tasks \
+  -H "Authorization: Bearer <your_token>"
+```
+
+### Update Task Status
+```bash
+curl -X PUT http://localhost:9800/api/v1/tasks/1 \
+  -H "Authorization: Bearer <your_token>" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "in_progress"}'
+```
+
+Status values: `pending`, `in_progress`, `done`, `cancelled`
+
+## 10. Error Handling
 
 All responses follow this format:
 
@@ -225,9 +260,20 @@ Success:
 {"ok": true, "data": ...}
 ```
 
-Error:
+Error (Enhanced in v2.3):
 ```json
-{"ok": false, "error": "description of what went wrong"}
+{
+  "ok": false,
+  "error": {
+    "code": "ENTITY_NOT_FOUND",
+    "message": "entity not found",
+    "request_id": "req_abc123_1234567",
+    "status": 404,
+    "timestamp": "2026-03-04T12:00:00Z",
+    "method": "GET",
+    "path": "/api/v1/entities/123"
+  }
+}
 ```
 
 Common HTTP status codes:
@@ -313,10 +359,19 @@ while True:
 | POST | `/api/v1/entities` | Full | Create bot |
 | GET | `/api/v1/entities` | Full | List entities |
 | PUT | `/api/v1/entities/:id` | Full | Update entity |
-| DELETE | `/api/v1/entities/:id` | Full | Delete entity |
+| DELETE | `/api/v1/entities/:id` | Full | Disable entity (soft delete) |
+| POST | `/api/v1/entities/:id/reactivate` | Full | Reactivate disabled entity |
 | POST | `/api/v1/entities/:id/approve` | Full | Approve connection |
 | GET | `/api/v1/entities/:id/status` | Full | Entity status |
+| GET | `/api/v1/entities/:id/credentials` | Full | Get entity credentials |
 | POST | `/api/v1/presence/batch` | Full | Batch presence query |
+| GET | `/api/v1/me/devices` | Full | List connected devices |
+| DELETE | `/api/v1/me/devices/:deviceId` | Full | Disconnect device |
+| POST | `/api/v1/conversations/:id/tasks` | Full | Create task |
+| GET | `/api/v1/conversations/:id/tasks` | Full | List tasks |
+| GET | `/api/v1/tasks/:id` | Full | Get task details |
+| PUT | `/api/v1/tasks/:id` | Full | Update task |
+| DELETE | `/api/v1/tasks/:id` | Full | Delete task |
 | POST | `/api/v1/files/upload` | Full | Upload file |
 | GET | `/api/v1/updates` | Full | Long polling |
-| WS | `/api/v1/ws?token=<token>` | Any | WebSocket |
+| WS | `/api/v1/ws?token=<token>&device_id=<id>` | Any | WebSocket |
