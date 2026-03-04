@@ -397,22 +397,29 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			continue
 		}
 
-		// Bots/services: respect subscription mode
+		// Bots/services: in 1-on-1 conversations always deliver;
+		// in group conversations respect subscription mode.
+		isDM := len(participants) <= 2
 		mode := subModes[client.entityID]
 		if mode == "" {
 			mode = model.SubMentionOnly
 		}
 
 		shouldDeliver := false
-		switch mode {
-		case model.SubSubscribeAll:
+		if isDM {
+			// Direct message: always deliver to the bot
 			shouldDeliver = true
-		case model.SubMentionOnly:
-			shouldDeliver = mentionSet[client.entityID]
-		case model.SubMentionWithCtx:
-			shouldDeliver = mentionSet[client.entityID]
-		case model.SubSubscribeDigest:
-			shouldDeliver = false // bot polls manually via REST
+		} else {
+			switch mode {
+			case model.SubSubscribeAll:
+				shouldDeliver = true
+			case model.SubMentionOnly:
+				shouldDeliver = mentionSet[client.entityID]
+			case model.SubMentionWithCtx:
+				shouldDeliver = mentionSet[client.entityID]
+			case model.SubSubscribeDigest:
+				shouldDeliver = false // bot polls manually via REST
+			}
 		}
 
 		if shouldDeliver {
