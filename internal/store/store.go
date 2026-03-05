@@ -14,6 +14,7 @@ type Store interface {
 	ConversationStore
 	ParticipantStore
 	MessageStore
+	ReactionStore
 	WebhookStore
 	PushStore
 	InviteStore
@@ -90,6 +91,12 @@ type MessageStore interface {
 	GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error)
 	RevokeMessage(ctx context.Context, messageID int64) error
 	UpdateMessage(ctx context.Context, msg *model.Message) error
+}
+
+type ReactionStore interface {
+	AddReaction(ctx context.Context, r *model.Reaction) error
+	RemoveReaction(ctx context.Context, messageID, entityID int64, emoji string) error
+	GetReactionsByMessages(ctx context.Context, messageIDs []int64) (map[int64][]model.ReactionSummary, error)
 }
 
 type InviteStore interface {

@@ -71,6 +71,7 @@ type Message struct {
 	CreatedAt      time.Time     `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`
 
 	// Computed fields (populated by handler, not stored in DB)
-	SenderType string  `bun:"-" json:"sender_type,omitempty"`
-	Sender     *Entity `bun:"-" json:"sender,omitempty"`
+	SenderType string             `bun:"-" json:"sender_type,omitempty"`
+	Sender     *Entity            `bun:"-" json:"sender,omitempty"`
+	Reactions  []ReactionSummary  `bun:"-" json:"reactions,omitempty"`
 }

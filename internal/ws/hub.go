@@ -651,7 +651,9 @@ func (h *Hub) handleTyping(client *Client, rawData []byte) {
 	var envelope struct {
 		Type string `json:"type"`
 		Data struct {
-			ConversationID int64 `json:"conversation_id"`
+			ConversationID int64  `json:"conversation_id"`
+			IsProcessing   bool   `json:"is_processing,omitempty"`
+			Phase          string `json:"phase,omitempty"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(rawData, &envelope); err != nil {
@@ -677,6 +679,13 @@ func (h *Hub) handleTyping(client *Client, rawData []byte) {
 		"conversation_id": envelope.Data.ConversationID,
 		"entity_id":       client.entityID,
 		"entity_name":     entityName,
+	}
+	// Pass through processing indicator fields
+	if envelope.Data.IsProcessing {
+		payload["is_processing"] = true
+		if envelope.Data.Phase != "" {
+			payload["phase"] = envelope.Data.Phase
+		}
 	}
 	msg := WSMessage{Type: "typing", Data: payload}
 	data, err := json.Marshal(msg)

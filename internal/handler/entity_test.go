@@ -370,6 +370,101 @@ func TestUpdateEntityOwnershipCheck(t *testing.T) {
 	assertStatus(t, resp, http.StatusForbidden)
 }
 
+func TestReactivateEntity(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "reactivate-me"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity, _ := data["entity"].(map[string]interface{})
+	entityID := int(entity["id"].(float64))
+
+	// Soft-delete (disable)
+	resp = doJSON(t, "DELETE", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	// Verify disabled — list entities should include it with status=disabled
+	resp = doJSON(t, "GET", "/api/v1/entities", ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	result := parseResponse(t, resp)
+	entities, _ := result["data"].([]interface{})
+	found := false
+	for _, e := range entities {
+		em := e.(map[string]interface{})
+		if int(em["id"].(float64)) == entityID {
+			if em["status"] != "disabled" {
+				t.Fatalf("expected status=disabled, got %v", em["status"])
+			}
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("disabled entity should still appear in list")
+	}
+
+	// Reactivate
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/reactivate", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	reactivated := parseOK(t, resp)
+	if reactivated["status"] != "active" {
+		t.Fatalf("expected status=active after reactivation, got %v", reactivated["status"])
+	}
+}
+
+func TestReactivateActiveEntity(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot (status=active by default)
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "already-active"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity, _ := data["entity"].(map[string]interface{})
+	entityID := int(entity["id"].(float64))
+
+	// Try to reactivate an active entity — should fail
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/reactivate", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusBadRequest)
+}
+
+func TestListEntitiesIncludesDisabled(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create two bots
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "active-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+
+	resp = doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "will-disable"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity, _ := data["entity"].(map[string]interface{})
+	disabledID := int(entity["id"].(float64))
+
+	// Disable one bot
+	resp = doJSON(t, "DELETE", fmt.Sprintf("/api/v1/entities/%d", disabledID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	// List should return both
+	resp = doJSON(t, "GET", "/api/v1/entities", ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	result := parseResponse(t, resp)
+	entities, _ := result["data"].([]interface{})
+
+	if len(entities) < 2 {
+		t.Fatalf("expected at least 2 entities (active + disabled), got %d", len(entities))
+	}
+
+	// Active entities should come first
+	first := entities[0].(map[string]interface{})
+	if first["status"] == "disabled" {
+		t.Fatal("active entities should be sorted before disabled ones")
+	}
+}
+
 // newWSTestServer creates an httptest.Server wired to the same router for WebSocket testing.
 func newWSTestServer(t *testing.T) *httptest.Server {
 	t.Helper()

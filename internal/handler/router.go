@@ -125,6 +125,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.DELETE("/messages/:id", s.HandleRevokeMessage)
 				full.PUT("/messages/:id", s.HandleEditMessage)
 				full.POST("/messages/:id/respond", s.HandleInteractionResponse)
+				full.POST("/messages/:id/reactions", s.HandleToggleReaction)
 				full.GET("/conversations/:id/messages", s.HandleListMessages)
 				full.GET("/conversations/:id/search", s.HandleSearchMessages)
 

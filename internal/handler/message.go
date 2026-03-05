@@ -361,6 +361,22 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 		}
 	}
 
+	// Populate reactions
+	if len(msgs) > 0 {
+		msgIDs := make([]int64, len(msgs))
+		for i, m := range msgs {
+			msgIDs[i] = m.ID
+		}
+		reactionsMap, err := s.Store.GetReactionsByMessages(ctx, msgIDs)
+		if err == nil && reactionsMap != nil {
+			for _, m := range msgs {
+				if r, ok := reactionsMap[m.ID]; ok {
+					m.Reactions = r
+				}
+			}
+		}
+	}
+
 	if msgs == nil {
 		msgs = []*model.Message{}
 	}
