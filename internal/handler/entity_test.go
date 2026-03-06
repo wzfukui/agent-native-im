@@ -238,6 +238,48 @@ func TestEntitySelfCheckAndDiagnostics(t *testing.T) {
 	if _, ok := diag["hub"].(map[string]interface{}); !ok {
 		t.Fatalf("expected hub object in diagnostics, got %T", diag["hub"])
 	}
+	if _, ok := diag["disconnect_count"].(float64); !ok {
+		t.Fatalf("expected disconnect_count number in diagnostics, got %T", diag["disconnect_count"])
+	}
+}
+
+func TestRegenerateEntityToken(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "regen-agent"})
+	assertStatus(t, resp, http.StatusCreated)
+	entityID := int(parseOK(t, resp)["entity"].(map[string]interface{})["id"].(float64))
+
+	// First rotation creates a permanent key
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/regenerate-token", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	firstData := parseOK(t, resp)
+	firstKey, _ := firstData["api_key"].(string)
+	if !strings.HasPrefix(firstKey, "aim_") {
+		t.Fatalf("expected permanent key prefix aim_, got %q", firstKey)
+	}
+
+	// First key can access full-auth endpoint
+	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(firstKey), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	// Second rotation invalidates first key
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/regenerate-token", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	secondData := parseOK(t, resp)
+	secondKey, _ := secondData["api_key"].(string)
+	if !strings.HasPrefix(secondKey, "aim_") {
+		t.Fatalf("expected permanent key prefix aim_, got %q", secondKey)
+	}
+	if secondKey == firstKey {
+		t.Fatal("expected regenerated key to differ from previous key")
+	}
+
+	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(firstKey), nil)
+	assertStatus(t, resp, http.StatusUnauthorized)
+	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(secondKey), nil)
+	assertStatus(t, resp, http.StatusOK)
 }
 
 func TestWebhookOwnership(t *testing.T) {

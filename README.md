@@ -188,6 +188,10 @@ curl http://localhost:9800/api/v1/entities/9/self-check \
 curl http://localhost:9800/api/v1/entities/9/diagnostics \
   -H "Authorization: Bearer YOUR_TOKEN"
 
+# 重新生成 Agent 永久 Token（会使旧 Token 失效）
+curl -X POST http://localhost:9800/api/v1/entities/9/regenerate-token \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
 # 停用 Agent（软删除）
 curl -X DELETE http://localhost:9800/api/v1/entities/9 \
   -H "Authorization: Bearer YOUR_TOKEN"

@@ -101,6 +101,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.GET("/entities/:id/credentials", s.HandleGetCredentials)
 				full.GET("/entities/:id/self-check", s.HandleEntitySelfCheck)
 				full.GET("/entities/:id/diagnostics", s.HandleEntityDiagnostics)
+				full.POST("/entities/:id/regenerate-token", s.HandleRegenerateEntityToken)
 				full.POST("/entities/:id/reactivate", s.HandleReactivateEntity)
 				full.POST("/presence/batch", s.HandleBatchPresence)
 

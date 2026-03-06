@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/store"
@@ -30,16 +31,21 @@ type Hub struct {
 
 	// Push notification callback for offline users
 	OnPush PushFunc
+
+	lastSeen        map[int64]time.Time
+	disconnectCount map[int64]int
 }
 
 func NewHub(st store.Store) *Hub {
 	return &Hub{
-		store:       st,
-		clients:     make(map[*Client]bool),
-		register:    make(chan *Client),
-		unregister:  make(chan *Client),
-		convClients: make(map[int64]map[*Client]bool),
-		waiters:     make(map[int64][]chan struct{}),
+		store:           st,
+		clients:         make(map[*Client]bool),
+		register:        make(chan *Client),
+		unregister:      make(chan *Client),
+		convClients:     make(map[int64]map[*Client]bool),
+		waiters:         make(map[int64][]chan struct{}),
+		lastSeen:        make(map[int64]time.Time),
+		disconnectCount: make(map[int64]int),
 	}
 }
 
@@ -70,6 +76,8 @@ func (h *Hub) Run() {
 				delete(h.clients, client)
 				close(client.send)
 				h.unsubscribeClientLocked(client)
+				h.lastSeen[client.entityID] = time.Now()
+				h.disconnectCount[client.entityID] = h.disconnectCount[client.entityID] + 1
 				stillOnline := h.isOnlineLocked(client.entityID)
 				total := len(h.clients)
 				h.mu.Unlock()
@@ -84,6 +92,21 @@ func (h *Hub) Run() {
 			}
 		}
 	}
+}
+
+// LastSeen returns the last disconnection timestamp for an entity.
+func (h *Hub) LastSeen(entityID int64) (time.Time, bool) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	ts, ok := h.lastSeen[entityID]
+	return ts, ok
+}
+
+// DisconnectCount returns the accumulated disconnect count for an entity.
+func (h *Hub) DisconnectCount(entityID int64) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.disconnectCount[entityID]
 }
 
 // DeviceInfo describes a connected device.

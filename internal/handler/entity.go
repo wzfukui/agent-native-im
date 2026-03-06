@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -372,11 +373,15 @@ func (s *Server) HandleEntityStatus(c *gin.Context) {
 		return
 	}
 
-	OK(c, http.StatusOK, gin.H{
+	resp := gin.H{
 		"entity_id": entity.ID,
 		"name":      entity.DisplayName,
 		"online":    s.Hub.IsOnline(entityID),
-	})
+	}
+	if lastSeen, ok := s.Hub.LastSeen(entityID); ok {
+		resp["last_seen"] = lastSeen
+	}
+	OK(c, http.StatusOK, resp)
 }
 
 // HandleGetCredentials returns credential status for a bot/service entity.
@@ -422,7 +427,7 @@ func (s *Server) HandleGetCredentials(c *gin.Context) {
 
 func (s *Server) ensureOwnedEntity(c *gin.Context) (*model.Entity, int64, bool) {
 	if auth.GetEntityType(c) != model.EntityUser {
-		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can view entity diagnostics")
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can manage entities")
 		return nil, 0, false
 	}
 
@@ -444,6 +449,22 @@ func (s *Server) ensureOwnedEntity(c *gin.Context) (*model.Entity, int64, bool) 
 	}
 
 	return target, entityID, true
+}
+
+func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (string, error) {
+	permanentKey := generateKey(keyPrefixPermanent)
+	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(permanentKey)))
+
+	cred := &model.Credential{
+		EntityID:   entityID,
+		CredType:   model.CredAPIKey,
+		SecretHash: keyHash,
+		RawPrefix:  permanentKey[:8],
+	}
+	if err := s.Store.CreateCredential(ctx, cred); err != nil {
+		return "", err
+	}
+	return permanentKey, nil
 }
 
 // HandleEntitySelfCheck returns a lightweight readiness report for an agent.
@@ -499,13 +520,14 @@ func (s *Server) HandleEntityDiagnostics(c *gin.Context) {
 	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
 	devices := s.Hub.GetConnectedDevices(entityID)
 
-	OK(c, http.StatusOK, gin.H{
-		"entity_id":   entityID,
-		"entity_name": target.DisplayName,
-		"status":      target.Status,
-		"online":      len(devices) > 0,
-		"connections": len(devices),
-		"devices":     devices,
+	resp := gin.H{
+		"entity_id":        entityID,
+		"entity_name":      target.DisplayName,
+		"status":           target.Status,
+		"online":           len(devices) > 0,
+		"connections":      len(devices),
+		"disconnect_count": s.Hub.DisconnectCount(entityID),
+		"devices":          devices,
 		"credentials": gin.H{
 			"has_bootstrap": len(bootstrapCreds) > 0,
 			"has_api_key":   len(apiKeyCreds) > 0,
@@ -513,6 +535,43 @@ func (s *Server) HandleEntityDiagnostics(c *gin.Context) {
 		"hub": gin.H{
 			"total_ws_connections": s.Hub.ConnectionCount(),
 		},
+	}
+	if lastSeen, ok := s.Hub.LastSeen(entityID); ok {
+		resp["last_seen"] = lastSeen
+	}
+	OK(c, http.StatusOK, resp)
+}
+
+// HandleRegenerateEntityToken rotates and returns a new permanent API key.
+func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
+	target, entityID, ok := s.ensureOwnedEntity(c)
+	if !ok {
+		return
+	}
+
+	ctx := c.Request.Context()
+	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredAPIKey); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to revoke previous api key")
+		return
+	}
+	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredBootstrap); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to revoke bootstrap key")
+		return
+	}
+
+	permanentKey, err := s.issuePermanentCredential(ctx, entityID)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to create permanent credential")
+		return
+	}
+
+	disconnected := s.Hub.DisconnectEntity(entityID)
+
+	OK(c, http.StatusOK, gin.H{
+		"message":      "token regenerated",
+		"entity":       target,
+		"api_key":      permanentKey,
+		"disconnected": disconnected,
 	})
 }
 
