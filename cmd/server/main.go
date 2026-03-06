@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"time"
 
 	"github.com/wzfukui/agent-native-im/internal/config"
 	"github.com/wzfukui/agent-native-im/internal/filestore"
@@ -68,7 +69,7 @@ func main() {
 		Store:     st,
 		Hub:       hub,
 		Webhook:   wh,
-		Auth:      &handler.AuthHelper{Secret: cfg.JWTSecret},
+		Auth:      &handler.AuthHelper{Secret: cfg.JWTSecret, TokenTTL: time.Duration(cfg.JWTTTLHours) * time.Hour},
 		FileStore: fs,
 		Push:      pushSender,
 	}

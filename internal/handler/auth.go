@@ -65,6 +65,10 @@ func (s *Server) HandleLogin(c *gin.Context) {
 		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid credentials")
 		return
 	}
+	if entity.Status == "disabled" {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "account is disabled")
+		return
+	}
 
 	// Look up password credential for this entity
 	creds, err := s.Store.GetCredentialsByEntity(c.Request.Context(), entity.ID, model.CredPassword)
@@ -113,6 +117,19 @@ func (s *Server) HandleMe(c *gin.Context) {
 func (s *Server) HandleRefreshToken(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	entityType := auth.GetEntityType(c)
+	if entityType != model.EntityUser {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can refresh token")
+		return
+	}
+	entity, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
+	if err != nil {
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid token")
+		return
+	}
+	if entity.Status == "disabled" {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "account is disabled")
+		return
+	}
 
 	token, err := s.Auth.GenerateToken(entityID, entityType)
 	if err != nil {

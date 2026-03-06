@@ -1,8 +1,14 @@
 package handler_test
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
+	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/wzfukui/agent-native-im/internal/auth"
+	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
 func TestPing(t *testing.T) {
@@ -139,6 +145,73 @@ func TestRefreshToken(t *testing.T) {
 	assertStatus(t, resp, http.StatusOK)
 }
 
+func TestRefreshTokenWithRecentlyExpiredJWT(t *testing.T) {
+	truncateAll(t)
+	validToken := seedAdmin(t)
+	claims, err := auth.ParseToken("test-secret", validToken)
+	if err != nil {
+		t.Fatalf("parse token: %v", err)
+	}
+
+	expiredTokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"entity_id":   float64(claims.EntityID),
+		"entity_type": string(model.EntityUser),
+		"exp":         time.Now().Add(-2 * time.Hour).Unix(),
+		"iat":         time.Now().Add(-26 * time.Hour).Unix(),
+	})
+	expiredToken, err := expiredTokenObj.SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatalf("failed to sign expired token: %v", err)
+	}
+
+	resp := doJSON(t, "POST", "/api/v1/auth/refresh", &expiredToken, nil)
+	assertStatus(t, resp, http.StatusOK)
+	data := parseOK(t, resp)
+	newToken, ok := data["token"].(string)
+	if !ok || newToken == "" {
+		t.Fatal("expected new token from refresh with expired JWT")
+	}
+}
+
+func TestRefreshTokenRejectsTooOldExpiredJWT(t *testing.T) {
+	truncateAll(t)
+	validToken := seedAdmin(t)
+	claims, err := auth.ParseToken("test-secret", validToken)
+	if err != nil {
+		t.Fatalf("parse token: %v", err)
+	}
+
+	oldExpiredTokenObj := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"entity_id":   float64(claims.EntityID),
+		"entity_type": string(model.EntityUser),
+		"exp":         time.Now().Add(-8 * 24 * time.Hour).Unix(),
+		"iat":         time.Now().Add(-9 * 24 * time.Hour).Unix(),
+	})
+	oldExpiredToken, err := oldExpiredTokenObj.SignedString([]byte("test-secret"))
+	if err != nil {
+		t.Fatalf("failed to sign old expired token: %v", err)
+	}
+
+	resp := doJSON(t, "POST", "/api/v1/auth/refresh", &oldExpiredToken, nil)
+	assertStatus(t, resp, http.StatusUnauthorized)
+}
+
+func TestRefreshTokenRejectsBotEntity(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "refresh-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	bootstrap, _ := data["bootstrap_key"].(string)
+	if bootstrap == "" {
+		t.Fatal("expected bootstrap key")
+	}
+
+	resp = doJSON(t, "POST", "/api/v1/auth/refresh", &bootstrap, nil)
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestUpdateProfile(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
@@ -199,5 +272,55 @@ func TestCreateUserNonAdmin(t *testing.T) {
 		"username": "another",
 		"password": "Another123",
 	})
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
+func TestLoginDisabledUserForbidden(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "disabled-user",
+		"password": "Disabled123",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	userID := int64(data["id"].(float64))
+
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/admin/users/%d", userID), ptr(adminToken), map[string]string{
+		"status": "disabled",
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	resp = doJSON(t, "POST", "/api/v1/auth/login", nil, map[string]string{
+		"username": "disabled-user",
+		"password": "Disabled123",
+	})
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
+func TestDisabledUserTokenRejectedByMeAndRefresh(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "disabled-after-login",
+		"password": "Disabled123",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	userID := int64(data["id"].(float64))
+
+	userToken := login(t, "disabled-after-login", "Disabled123")
+
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/admin/users/%d", userID), ptr(adminToken), map[string]string{
+		"status": "disabled",
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	resp = doJSON(t, "GET", "/api/v1/me", ptr(userToken), nil)
+	assertStatus(t, resp, http.StatusForbidden)
+
+	resp = doJSON(t, "POST", "/api/v1/auth/refresh", ptr(userToken), nil)
 	assertStatus(t, resp, http.StatusForbidden)
 }

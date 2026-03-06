@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/model"
@@ -40,10 +41,46 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 		// 1. Try JWT
 		claims, err := ParseToken(secret, tokenStr)
 		if err == nil {
-			c.Set("entityID", claims.EntityID)
-			c.Set("entityType", claims.EntityType)
+			entity, getErr := st.GetEntityByID(c.Request.Context(), claims.EntityID)
+			if getErr != nil {
+				fail(c, http.StatusUnauthorized, "invalid token")
+				c.Abort()
+				return
+			}
+			if entity.Status == "disabled" {
+				fail(c, http.StatusForbidden, "entity is disabled")
+				c.Abort()
+				return
+			}
+			c.Set("entityID", entity.ID)
+			c.Set("entityType", entity.EntityType)
 			c.Next()
 			return
+		}
+
+		// 1.1 Allow recently-expired JWTs only for token refresh endpoint.
+		// This enables automatic session recovery after short offline periods.
+		if c.Request.URL.Path == "/api/v1/auth/refresh" {
+			expiredClaims, expiredErr := ParseTokenAllowExpired(secret, tokenStr)
+			if expiredErr == nil && expiredClaims.ExpiresAt != nil {
+				now := time.Now()
+				expAt := expiredClaims.ExpiresAt.Time
+				if !expAt.IsZero() && !expAt.After(now) && now.Sub(expAt) <= 7*24*time.Hour {
+					entity, getErr := st.GetEntityByID(c.Request.Context(), expiredClaims.EntityID)
+					if getErr == nil {
+						if entity.Status == "disabled" {
+							fail(c, http.StatusForbidden, "entity is disabled")
+							c.Abort()
+							return
+						}
+						c.Set("entityID", entity.ID)
+						c.Set("entityType", entity.EntityType)
+						c.Set("allowExpiredJWT", true)
+						c.Next()
+						return
+					}
+				}
+			}
 		}
 
 		// 2. Try API key / bootstrap key

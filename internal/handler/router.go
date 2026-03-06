@@ -4,12 +4,13 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/config"
-	"github.com/wzfukui/agent-native-im/internal/middleware"
 	"github.com/wzfukui/agent-native-im/internal/filestore"
+	"github.com/wzfukui/agent-native-im/internal/middleware"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/push"
 	"github.com/wzfukui/agent-native-im/internal/store"
@@ -18,11 +19,12 @@ import (
 )
 
 type AuthHelper struct {
-	Secret string
+	Secret   string
+	TokenTTL time.Duration
 }
 
 func (a *AuthHelper) GenerateToken(entityID int64, entityType model.EntityType) (string, error) {
-	return auth.GenerateToken(a.Secret, entityID, entityType)
+	return auth.GenerateTokenWithTTL(a.Secret, entityID, entityType, a.TokenTTL)
 }
 
 type Server struct {
@@ -77,7 +79,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.GET("/me/devices", s.HandleListDevices)
 				full.DELETE("/me/devices/:deviceId", s.HandleKickDevice)
 
-			// Admin-only endpoints
+				// Admin-only endpoints
 				admin := full.Group("")
 				admin.Use(auth.RequireAdmin(s.Store, s.Config.AdminUser))
 				{
@@ -109,7 +111,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations", s.HandleCreateConversation)
 				full.GET("/conversations", s.HandleListConversations)
 				full.GET("/conversations/:id", s.HandleGetConversation)
-			full.PUT("/conversations/:id", s.HandleUpdateConversation)
+				full.PUT("/conversations/:id", s.HandleUpdateConversation)
 
 				// Participants & lifecycle
 				full.POST("/conversations/:id/participants", s.HandleAddParticipant)
@@ -185,12 +187,12 @@ func NewRouter(s *Server) *gin.Engine {
 func corsMiddleware() gin.HandlerFunc {
 	// Security: Whitelist of allowed origins
 	allowedOrigins := map[string]bool{
-		"https://ani-web.51pwd.com":  true,
-		"http://localhost:3000":       true, // Development
-		"http://localhost:5173":       true, // Vite dev server
-		"http://192.168.44.43:3000":   true, // Local network testing
-		"http://127.0.0.1:3000":       true, // Alternative localhost
-		"http://127.0.0.1:5173":       true, // Alternative Vite
+		"https://ani-web.51pwd.com": true,
+		"http://localhost:3000":     true, // Development
+		"http://localhost:5173":     true, // Vite dev server
+		"http://192.168.44.43:3000": true, // Local network testing
+		"http://127.0.0.1:3000":     true, // Alternative localhost
+		"http://127.0.0.1:5173":     true, // Alternative Vite
 	}
 
 	return func(c *gin.Context) {

@@ -114,6 +114,7 @@ ADMIN_PASS=strong-admin-password       # 必需：管理员密码
 # 可选（有默认值）
 PORT=9800
 DATABASE_URL=postgres://chris@localhost/agent_im?sslmode=disable
+JWT_TTL_HOURS=24                          # 可选：用户 JWT 有效期（小时）
 ADMIN_USER=chris
 SERVER_URL=http://localhost:9800
 AUTO_APPROVE_AGENTS=false              # 设为 true 自动审批 Agent 连接

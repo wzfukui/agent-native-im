@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/config"
@@ -63,7 +64,7 @@ func TestMain(m *testing.M) {
 		Store:     testStore,
 		Hub:       testHub,
 		Webhook:   webhook.NewDeliverer(testStore),
-		Auth:      &handler.AuthHelper{Secret: cfg.JWTSecret},
+		Auth:      &handler.AuthHelper{Secret: cfg.JWTSecret, TokenTTL: 24 * time.Hour},
 		FileStore: fs,
 	}
 
