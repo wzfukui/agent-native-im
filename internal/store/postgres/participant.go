@@ -142,6 +142,26 @@ func (s *PGStore) UnarchiveConversation(ctx context.Context, conversationID, ent
 	return err
 }
 
+func (s *PGStore) PinConversation(ctx context.Context, conversationID, entityID int64) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("pinned_at = NOW()").
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
+func (s *PGStore) UnpinConversation(ctx context.Context, conversationID, entityID int64) error {
+	_, err := s.DB.NewUpdate().Model((*model.Participant)(nil)).
+		Set("pinned_at = NULL").
+		Where("conversation_id = ?", conversationID).
+		Where("entity_id = ?", entityID).
+		Where("left_at IS NULL").
+		Exec(ctx)
+	return err
+}
+
 func (s *PGStore) GetConversationIDsByEntity(ctx context.Context, entityID int64) ([]int64, error) {
 	var ids []int64
 	err := s.DB.NewSelect().Model((*model.Participant)(nil)).

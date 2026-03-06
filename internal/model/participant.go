@@ -37,6 +37,7 @@ type Participant struct {
 	JoinedAt         time.Time        `bun:"joined_at,nullzero,notnull,default:now()" json:"joined_at"`
 	LeftAt           *time.Time       `bun:"left_at" json:"left_at,omitempty"`
 	ArchivedAt       *time.Time       `bun:"archived_at" json:"archived_at,omitempty"`
+	PinnedAt         *time.Time       `bun:"pinned_at" json:"pinned_at,omitempty"`
 
 	Entity       *Entity       `bun:"rel:belongs-to,join:entity_id=id" json:"entity,omitempty"`
 	Conversation *Conversation `bun:"rel:belongs-to,join:conversation_id=id" json:"-"`

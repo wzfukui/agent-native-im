@@ -119,6 +119,8 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations/:id/leave", s.HandleLeaveConversation)
 				full.POST("/conversations/:id/archive", s.HandleArchiveConversation)
 				full.POST("/conversations/:id/unarchive", s.HandleUnarchiveConversation)
+				full.POST("/conversations/:id/pin", s.HandlePinConversation)
+				full.POST("/conversations/:id/unpin", s.HandleUnpinConversation)
 
 				// Messages (with rate limiting)
 				full.POST("/messages/send", rateLimiters["message"].Middleware(), s.HandleSendMessage)

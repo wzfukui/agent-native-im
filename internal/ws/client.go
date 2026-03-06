@@ -109,6 +109,11 @@ func (c *Client) WritePump() {
 }
 
 func (c *Client) sendJSON(v interface{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("ws: entity %d send recovered from panic (channel closed)", c.entityID)
+		}
+	}()
 	data, err := json.Marshal(v)
 	if err != nil {
 		return

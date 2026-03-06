@@ -81,6 +81,8 @@ type ParticipantStore interface {
 	UpdateParticipantRole(ctx context.Context, conversationID, entityID int64, role model.ParticipantRole) error
 	ArchiveConversation(ctx context.Context, conversationID, entityID int64) error
 	UnarchiveConversation(ctx context.Context, conversationID, entityID int64) error
+	PinConversation(ctx context.Context, conversationID, entityID int64) error
+	UnpinConversation(ctx context.Context, conversationID, entityID int64) error
 }
 
 type MessageStore interface {

@@ -186,6 +186,79 @@ func TestArchiveUnarchiveConversation(t *testing.T) {
 	}
 }
 
+// --- Pin / Unpin ---
+
+func TestPinUnpinConversation(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create conversation
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title": "Pin Test",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	convID := int(data["id"].(float64))
+
+	// Pin
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/pin", convID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	// Verify pinned_at is set in conversation participants
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/conversations/%d", convID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	data = parseOK(t, resp)
+	participants := data["participants"].([]interface{})
+	found := false
+	for _, p := range participants {
+		participant := p.(map[string]interface{})
+		if participant["pinned_at"] != nil {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected pinned_at to be set after pinning")
+	}
+
+	// Unpin
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/unpin", convID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	// Verify pinned_at is cleared
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/conversations/%d", convID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	data = parseOK(t, resp)
+	participants = data["participants"].([]interface{})
+	for _, p := range participants {
+		participant := p.(map[string]interface{})
+		if participant["pinned_at"] != nil {
+			t.Fatal("expected pinned_at to be nil after unpinning")
+		}
+	}
+}
+
+func TestPinNotParticipant(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
+		"username": "pinner",
+		"password": "Pinner123",
+	})
+	pinnerToken := login(t, "pinner", "Pinner123")
+
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title": "Not Mine",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	convID := int(data["id"].(float64))
+
+	// Non-participant tries to pin — should fail
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/pin", convID), ptr(pinnerToken), nil)
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestArchiveNotParticipant(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

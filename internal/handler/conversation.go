@@ -593,3 +593,53 @@ func (s *Server) HandleUnarchiveConversation(c *gin.Context) {
 
 	OK(c, http.StatusOK, "conversation unarchived")
 }
+
+// HandlePinConversation pins a conversation for the caller.
+func (s *Server) HandlePinConversation(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
+		return
+	}
+
+	if err := s.Store.PinConversation(ctx, convID, entityID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to pin conversation")
+		return
+	}
+
+	OK(c, http.StatusOK, "conversation pinned")
+}
+
+// HandleUnpinConversation unpins a conversation for the caller.
+func (s *Server) HandleUnpinConversation(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
+		return
+	}
+
+	if err := s.Store.UnpinConversation(ctx, convID, entityID); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to unpin conversation")
+		return
+	}
+
+	OK(c, http.StatusOK, "conversation unpinned")
+}

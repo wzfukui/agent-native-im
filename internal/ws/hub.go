@@ -61,6 +61,9 @@ func (h *Hub) Run() {
 				h.broadcastPresence(client.entityID, true)
 			}
 
+			// Push entity config (subscription modes) to newly connected client
+			go h.pushEntityConfig(client)
+
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
@@ -206,6 +209,53 @@ func (h *Hub) broadcastPresence(entityID int64, online bool) {
 
 func (h *Hub) Register(client *Client) {
 	h.register <- client
+}
+
+// pushEntityConfig sends the entity's subscription config for all conversations after connection.
+func (h *Hub) pushEntityConfig(client *Client) {
+	ctx := context.Background()
+	convIDs, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
+	if err != nil {
+		log.Printf("ws: failed to get conversations for entity config %d: %v", client.entityID, err)
+		return
+	}
+
+	type convConfig struct {
+		ConversationID   int64  `json:"conversation_id"`
+		SubscriptionMode string `json:"subscription_mode"`
+	}
+
+	var configs []convConfig
+	for _, convID := range convIDs {
+		p, err := h.store.GetParticipant(ctx, convID, client.entityID)
+		if err != nil || p == nil {
+			continue
+		}
+		mode := string(p.SubscriptionMode)
+		if mode == "" {
+			mode = "mention_only"
+		}
+		configs = append(configs, convConfig{
+			ConversationID:   convID,
+			SubscriptionMode: mode,
+		})
+	}
+
+	// Client may have disconnected while we were fetching configs
+	h.mu.RLock()
+	_, stillConnected := h.clients[client]
+	h.mu.RUnlock()
+	if !stillConnected {
+		return
+	}
+
+	client.sendJSON(WSMessage{
+		Type: "entity.config",
+		Data: map[string]interface{}{
+			"entity_id":     client.entityID,
+			"conversations": configs,
+		},
+	})
 }
 
 // subscribeClientLocked subscribes a client to its conversations. Caller must hold h.mu write lock.
