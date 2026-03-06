@@ -206,6 +206,40 @@ func TestEntityStatus(t *testing.T) {
 	}
 }
 
+func TestEntitySelfCheckAndDiagnostics(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Create bot
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "diag-agent"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	entity := data["entity"].(map[string]interface{})
+	entityID := int(entity["id"].(float64))
+
+	// Self-check should be accessible and include readiness fields
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/entities/%d/self-check", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	selfCheck := parseOK(t, resp)
+	if _, ok := selfCheck["ready"].(bool); !ok {
+		t.Fatalf("expected ready bool in self-check, got %T", selfCheck["ready"])
+	}
+	if _, ok := selfCheck["recommendation"].([]interface{}); !ok {
+		t.Fatalf("expected recommendation list in self-check, got %T", selfCheck["recommendation"])
+	}
+
+	// Diagnostics should be accessible and include connection counters
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/entities/%d/diagnostics", entityID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	diag := parseOK(t, resp)
+	if _, ok := diag["connections"].(float64); !ok {
+		t.Fatalf("expected connections number in diagnostics, got %T", diag["connections"])
+	}
+	if _, ok := diag["hub"].(map[string]interface{}); !ok {
+		t.Fatalf("expected hub object in diagnostics, got %T", diag["hub"])
+	}
+}
+
 func TestWebhookOwnership(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

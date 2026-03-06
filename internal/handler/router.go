@@ -99,6 +99,8 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/entities/:id/approve", s.HandleApproveConnection)
 				full.GET("/entities/:id/status", s.HandleEntityStatus)
 				full.GET("/entities/:id/credentials", s.HandleGetCredentials)
+				full.GET("/entities/:id/self-check", s.HandleEntitySelfCheck)
+				full.GET("/entities/:id/diagnostics", s.HandleEntityDiagnostics)
 				full.POST("/entities/:id/reactivate", s.HandleReactivateEntity)
 				full.POST("/presence/batch", s.HandleBatchPresence)
 

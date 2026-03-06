@@ -180,6 +180,14 @@ curl http://localhost:9800/api/v1/entities \
 curl http://localhost:9800/api/v1/entities/9/status \
   -H "Authorization: Bearer YOUR_TOKEN"
 
+# Agent 自检（接入就绪度）
+curl http://localhost:9800/api/v1/entities/9/self-check \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
+# Agent 连接诊断（连接数 / 设备 / 凭证状态）
+curl http://localhost:9800/api/v1/entities/9/diagnostics \
+  -H "Authorization: Bearer YOUR_TOKEN"
+
 # 停用 Agent（软删除）
 curl -X DELETE http://localhost:9800/api/v1/entities/9 \
   -H "Authorization: Bearer YOUR_TOKEN"

@@ -289,9 +289,9 @@ curl %s/api/v1/skill-template?format=text
 	)
 
 	OK(c, http.StatusCreated, gin.H{
-		"entity":       entity,
+		"entity":        entity,
 		"bootstrap_key": bootstrapKey,
-		"markdown_doc": markdownDoc,
+		"markdown_doc":  markdownDoc,
 	})
 }
 
@@ -420,6 +420,102 @@ func (s *Server) HandleGetCredentials(c *gin.Context) {
 	})
 }
 
+func (s *Server) ensureOwnedEntity(c *gin.Context) (*model.Entity, int64, bool) {
+	if auth.GetEntityType(c) != model.EntityUser {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can view entity diagnostics")
+		return nil, 0, false
+	}
+
+	entityID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid entity id")
+		return nil, 0, false
+	}
+
+	target, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
+	if err != nil {
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
+		return nil, 0, false
+	}
+
+	if target.OwnerID == nil || *target.OwnerID != auth.GetEntityID(c) {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotOwner, "not the owner of this entity")
+		return nil, 0, false
+	}
+
+	return target, entityID, true
+}
+
+// HandleEntitySelfCheck returns a lightweight readiness report for an agent.
+func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
+	target, entityID, ok := s.ensureOwnedEntity(c)
+	if !ok {
+		return
+	}
+
+	ctx := c.Request.Context()
+	bootstrapCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredBootstrap)
+	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
+
+	isOnline := s.Hub.IsOnline(entityID)
+	ready := target.Status == "active" && len(apiKeyCreds) > 0
+
+	recommendations := make([]string, 0, 3)
+	if target.Status != "active" {
+		recommendations = append(recommendations, "entity is disabled, reactivate it first")
+	}
+	if len(apiKeyCreds) == 0 {
+		if len(bootstrapCreds) > 0 {
+			recommendations = append(recommendations, "agent is still using bootstrap key, complete approval to issue permanent key")
+		} else {
+			recommendations = append(recommendations, "no credentials found, recreate or re-approve this agent")
+		}
+	}
+	if !isOnline {
+		recommendations = append(recommendations, "agent is offline, verify network and websocket handshake")
+	}
+
+	OK(c, http.StatusOK, gin.H{
+		"entity_id":      entityID,
+		"entity_name":    target.DisplayName,
+		"status":         target.Status,
+		"online":         isOnline,
+		"ready":          ready,
+		"has_bootstrap":  len(bootstrapCreds) > 0,
+		"has_api_key":    len(apiKeyCreds) > 0,
+		"recommendation": recommendations,
+	})
+}
+
+// HandleEntityDiagnostics returns connection diagnostics for one owned entity.
+func (s *Server) HandleEntityDiagnostics(c *gin.Context) {
+	target, entityID, ok := s.ensureOwnedEntity(c)
+	if !ok {
+		return
+	}
+
+	ctx := c.Request.Context()
+	bootstrapCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredBootstrap)
+	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
+	devices := s.Hub.GetConnectedDevices(entityID)
+
+	OK(c, http.StatusOK, gin.H{
+		"entity_id":   entityID,
+		"entity_name": target.DisplayName,
+		"status":      target.Status,
+		"online":      len(devices) > 0,
+		"connections": len(devices),
+		"devices":     devices,
+		"credentials": gin.H{
+			"has_bootstrap": len(bootstrapCreds) > 0,
+			"has_api_key":   len(apiKeyCreds) > 0,
+		},
+		"hub": gin.H{
+			"total_ws_connections": s.Hub.ConnectionCount(),
+		},
+	})
+}
+
 // HandleBatchPresence returns online status for a batch of entity IDs.
 func (s *Server) HandleBatchPresence(c *gin.Context) {
 	var req struct {
@@ -539,9 +635,9 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 			}
 			// Check for dangerous schemes
 			if !strings.HasPrefix(avatarURL, "http://") &&
-			   !strings.HasPrefix(avatarURL, "https://") &&
-			   !strings.HasPrefix(avatarURL, "data:image/") &&
-			   !strings.HasPrefix(avatarURL, "/files/") {
+				!strings.HasPrefix(avatarURL, "https://") &&
+				!strings.HasPrefix(avatarURL, "data:image/") &&
+				!strings.HasPrefix(avatarURL, "/files/") {
 				FailWithCode(c, http.StatusBadRequest, ErrCodeValidationFormat, "invalid avatar URL scheme")
 				return
 			}
