@@ -114,6 +114,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations", s.HandleCreateConversation)
 				full.GET("/conversations", s.HandleListConversations)
 				full.GET("/conversations/:id", s.HandleGetConversation)
+				full.GET("/conversations/public/:publicId", s.HandleGetConversationByPublicID)
 				full.PUT("/conversations/:id", s.HandleUpdateConversation)
 
 				// Participants & lifecycle

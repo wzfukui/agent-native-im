@@ -25,6 +25,19 @@ func (s *PGStore) GetConversation(ctx context.Context, id int64) (*model.Convers
 	return conv, nil
 }
 
+func (s *PGStore) GetConversationByPublicID(ctx context.Context, publicID string) (*model.Conversation, error) {
+	conv := new(model.Conversation)
+	err := s.DB.NewSelect().Model(conv).
+		Relation("Participants").
+		Relation("Participants.Entity").
+		Where("conversation.metadata->>'public_id' = ?", publicID).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return conv, nil
+}
+
 func (s *PGStore) ListConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error) {
 	var convs []*model.Conversation
 	err := s.DB.NewSelect().Model(&convs).

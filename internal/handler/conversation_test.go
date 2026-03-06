@@ -80,6 +80,48 @@ func TestGetConversation(t *testing.T) {
 	assertStatus(t, resp, http.StatusOK)
 }
 
+func TestGetConversationByPublicID(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Public ID lookup"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	meta, _ := data["metadata"].(map[string]interface{})
+	publicID, _ := meta["public_id"].(string)
+	if publicID == "" {
+		t.Fatal("expected metadata.public_id")
+	}
+
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/conversations/public/%s", publicID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	got := parseOK(t, resp)
+	if got["id"] != data["id"] {
+		t.Fatalf("expected conversation id %v, got %v", data["id"], got["id"])
+	}
+}
+
+func TestGetConversationByPublicIDForbiddenForNonParticipant(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{"title": "Secret"})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	meta, _ := data["metadata"].(map[string]interface{})
+	publicID, _ := meta["public_id"].(string)
+
+	resp = doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "publicid-other-user",
+		"password": "Otherpass1",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	otherToken := login(t, "publicid-other-user", "Otherpass1")
+
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/conversations/public/%s", publicID), ptr(otherToken), nil)
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestAddRemoveParticipant(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

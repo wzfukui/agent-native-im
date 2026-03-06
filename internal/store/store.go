@@ -61,6 +61,7 @@ type CredentialStore interface {
 type ConversationStore interface {
 	CreateConversation(ctx context.Context, conv *model.Conversation) error
 	GetConversation(ctx context.Context, id int64) (*model.Conversation, error)
+	GetConversationByPublicID(ctx context.Context, publicID string) (*model.Conversation, error)
 	ListConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error)
 	ListArchivedConversationsByEntity(ctx context.Context, entityID int64) ([]*model.Conversation, error)
 	ListAllConversations(ctx context.Context, limit, offset int) ([]*model.Conversation, int, error)

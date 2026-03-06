@@ -242,6 +242,31 @@ func (s *Server) HandleGetConversation(c *gin.Context) {
 	OK(c, http.StatusOK, conv)
 }
 
+func (s *Server) HandleGetConversationByPublicID(c *gin.Context) {
+	publicID := strings.TrimSpace(c.Param("publicId"))
+	if publicID == "" {
+		Fail(c, http.StatusBadRequest, "invalid public conversation id")
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	conv, err := s.Store.GetConversationByPublicID(ctx, publicID)
+	if err != nil {
+		FailWithCode(c, http.StatusNotFound, ErrCodeConvNotFound, "conversation not found")
+		return
+	}
+
+	ok, err := s.Store.IsParticipant(ctx, conv.ID, entityID)
+	if err != nil || !ok {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
+		return
+	}
+
+	OK(c, http.StatusOK, conv)
+}
+
 // HandleAddParticipant adds an entity to a conversation.
 func (s *Server) HandleAddParticipant(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
