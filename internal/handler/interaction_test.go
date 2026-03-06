@@ -15,12 +15,12 @@ func TestObserverCannotSendMessage(t *testing.T) {
 	// Create a user that will be an observer
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "observer",
-		"password": "observer123",
+		"password": "Observer123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	obsData := parseOK(t, resp)
 	obsID := int(obsData["id"].(float64))
-	obsToken := login(t, "observer", "observer123")
+	obsToken := login(t, "observer", "Observer123")
 
 	// Create conversation
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -53,12 +53,12 @@ func TestObserverCanReadMessages(t *testing.T) {
 	// Create observer user
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "observer2",
-		"password": "observer2123",
+		"password": "Observer2p123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	obsData := parseOK(t, resp)
 	obsID := int(obsData["id"].(float64))
-	obsToken := login(t, "observer2", "observer2123")
+	obsToken := login(t, "observer2", "Observer2p123")
 
 	// Create conversation
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -148,9 +148,9 @@ func TestInteractionResponseNotParticipant(t *testing.T) {
 	// Create user not in conversation
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "outsider",
-		"password": "outsider123",
+		"password": "Outsider123",
 	})
-	outsiderToken := login(t, "outsider", "outsider123")
+	outsiderToken := login(t, "outsider", "Outsider123")
 
 	// Outsider tries to respond — should fail
 	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/messages/%d/respond", msgID), ptr(outsiderToken), map[string]string{
@@ -204,12 +204,12 @@ func TestEditMessageNotSender(t *testing.T) {
 	// Create another user and add to conversation
 	resp = doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "editor",
-		"password": "editor123",
+		"password": "Editor123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	editorData := parseOK(t, resp)
 	editorID := int(editorData["id"].(float64))
-	editorToken := login(t, "editor", "editor123")
+	editorToken := login(t, "editor", "Editor123")
 
 	doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/participants", convID), ptr(token), map[string]interface{}{
 		"entity_id": editorID,

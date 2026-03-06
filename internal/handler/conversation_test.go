@@ -109,13 +109,13 @@ func TestRemoveParticipantRoleCheck(t *testing.T) {
 	// Create a second user
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member-user",
-		"password": "memberpass",
+		"password": "Memberpass1",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
 
-	memberToken := login(t, "member-user", "memberpass")
+	memberToken := login(t, "member-user", "Memberpass1")
 
 	// Create a bot
 	resp = doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "target-bot"})
@@ -155,12 +155,12 @@ func TestAddParticipantAdminRoleElevation(t *testing.T) {
 	// Create a regular member
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member",
-		"password": "memberpass",
+		"password": "Memberpass1",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member", "memberpass")
+	memberToken := login(t, "member", "Memberpass1")
 
 	// Create a bot to add
 	resp = doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "role-test-bot"})

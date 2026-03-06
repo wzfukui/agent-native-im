@@ -55,7 +55,7 @@ func TestChangePassword(t *testing.T) {
 	// Change password
 	resp := doJSON(t, "PUT", "/api/v1/me/password", ptr(token), map[string]string{
 		"old_password": "testpass",
-		"new_password": "newpass123",
+		"new_password": "Newpass123",
 	})
 	assertStatus(t, resp, http.StatusOK)
 
@@ -69,7 +69,7 @@ func TestChangePassword(t *testing.T) {
 	// New password should work
 	resp = doJSON(t, "POST", "/api/v1/auth/login", nil, map[string]string{
 		"username": "testadmin",
-		"password": "newpass123",
+		"password": "Newpass123",
 	})
 	assertStatus(t, resp, http.StatusOK)
 }
@@ -80,7 +80,7 @@ func TestChangePasswordWrongOld(t *testing.T) {
 
 	resp := doJSON(t, "PUT", "/api/v1/me/password", ptr(token), map[string]string{
 		"old_password": "wrong",
-		"new_password": "newpass123",
+		"new_password": "Newpass123",
 	})
 	assertStatus(t, resp, http.StatusUnauthorized)
 }
@@ -92,7 +92,7 @@ func TestCreateUser(t *testing.T) {
 	// Create a new user
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username":     "newuser",
-		"password":     "userpass123",
+		"password":     "Userpass123",
 		"display_name": "New User",
 	})
 	assertStatus(t, resp, http.StatusCreated)
@@ -105,7 +105,7 @@ func TestCreateUser(t *testing.T) {
 	// New user should be able to login
 	resp = doJSON(t, "POST", "/api/v1/auth/login", nil, map[string]string{
 		"username": "newuser",
-		"password": "userpass123",
+		"password": "Userpass123",
 	})
 	assertStatus(t, resp, http.StatusOK)
 }
@@ -188,16 +188,16 @@ func TestCreateUserNonAdmin(t *testing.T) {
 	// Create a regular user
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "regular",
-		"password": "regular123",
+		"password": "Regular123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 
-	regularToken := login(t, "regular", "regular123")
+	regularToken := login(t, "regular", "Regular123")
 
 	// Regular user tries to create a user — should fail (admin only)
 	resp = doJSON(t, "POST", "/api/v1/admin/users", ptr(regularToken), map[string]string{
 		"username": "another",
-		"password": "another123",
+		"password": "Another123",
 	})
 	assertStatus(t, resp, http.StatusForbidden)
 }

@@ -89,9 +89,9 @@ func TestReactionNotParticipant(t *testing.T) {
 	// Create another user
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "outsider",
-		"password": "outsider123",
+		"password": "Outsider123",
 	})
-	outsiderToken := login(t, "outsider", "outsider123")
+	outsiderToken := login(t, "outsider", "Outsider123")
 
 	// Non-participant tries to react — should be forbidden
 	resp := doJSON(t, "POST", fmt.Sprintf("/api/v1/messages/%d/reactions", msgID), ptr(outsiderToken), map[string]string{

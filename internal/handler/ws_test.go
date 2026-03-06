@@ -25,20 +25,25 @@ func TestWebSocketConnect(t *testing.T) {
 	}
 	defer conn.Close()
 
-	// Send ping, expect pong
+	// Send ping, expect pong (may need to skip entity.config first)
 	msg := map[string]string{"type": "ping"}
 	if err := conn.WriteJSON(msg); err != nil {
 		t.Fatalf("ws write: %v", err)
 	}
 
 	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var resp map[string]interface{}
-	if err := conn.ReadJSON(&resp); err != nil {
-		t.Fatalf("ws read: %v", err)
-	}
-
-	if resp["type"] != "pong" {
-		t.Fatalf("expected pong, got %v", resp["type"])
+	for {
+		var resp map[string]interface{}
+		if err := conn.ReadJSON(&resp); err != nil {
+			t.Fatalf("ws read: %v", err)
+		}
+		if resp["type"] == "entity.config" {
+			continue // skip config push
+		}
+		if resp["type"] != "pong" {
+			t.Fatalf("expected pong, got %v", resp["type"])
+		}
+		break
 	}
 }
 
@@ -80,7 +85,8 @@ func TestWebSocketSendMessage(t *testing.T) {
 	}
 	defer conn.Close()
 
-	time.Sleep(100 * time.Millisecond)
+	// Drain entity.config message pushed on connect
+	skipEntityConfig(t, conn)
 
 	// Send a message via WebSocket
 	sendMsg := map[string]interface{}{
@@ -156,7 +162,9 @@ func TestWebSocketStreamProtocol(t *testing.T) {
 	}
 	defer receiverConn.Close()
 
-	time.Sleep(200 * time.Millisecond)
+	// Drain entity.config messages on both connections
+	skipEntityConfig(t, senderConn)
+	skipEntityConfig(t, receiverConn)
 
 	streamID := "test-stream-001"
 
@@ -265,12 +273,12 @@ func TestWebSocketRevokeEvent(t *testing.T) {
 	// Create a second user to receive the revoke event
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "revoke-observer",
-		"password": "observer123",
+		"password": "Observer123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	observerData := parseOK(t, resp)
 	observerID := observerData["id"].(float64)
-	observerToken := login(t, "revoke-observer", "observer123")
+	observerToken := login(t, "revoke-observer", "Observer123")
 
 	// Create conversation with observer
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -299,7 +307,8 @@ func TestWebSocketRevokeEvent(t *testing.T) {
 	}
 	defer observerConn.Close()
 
-	time.Sleep(200 * time.Millisecond)
+	// Drain entity.config
+	skipEntityConfig(t, observerConn)
 
 	// Send a message via HTTP
 	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
@@ -341,12 +350,12 @@ func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
 	// Create a second human user
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "human2",
-		"password": "human2pass",
+		"password": "Human2pass1",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	human2Data := parseOK(t, resp)
 	human2ID := human2Data["id"].(float64)
-	human2Token := login(t, "human2", "human2pass")
+	human2Token := login(t, "human2", "Human2pass1")
 
 	// Create group with human2
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -369,7 +378,8 @@ func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
 	}
 	defer conn.Close()
 
-	time.Sleep(200 * time.Millisecond)
+	// Drain entity.config
+	skipEntityConfig(t, conn)
 
 	// Admin sends a message without mentioning human2
 	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
@@ -386,6 +396,20 @@ func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
 	}
 	if wsMsg["type"] != "message.new" {
 		t.Fatalf("expected type=message.new, got %v", wsMsg["type"])
+	}
+}
+
+// skipEntityConfig reads and discards the initial entity.config message pushed on WS connect.
+func skipEntityConfig(t *testing.T, conn *gorillaWs.Conn) {
+	t.Helper()
+	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	var msg map[string]interface{}
+	if err := conn.ReadJSON(&msg); err != nil {
+		t.Logf("skipEntityConfig: no entity.config received: %v", err)
+		return
+	}
+	if msg["type"] != "entity.config" {
+		t.Fatalf("skipEntityConfig: expected entity.config, got %v", msg["type"])
 	}
 }
 

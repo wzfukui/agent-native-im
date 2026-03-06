@@ -125,8 +125,8 @@ func TestApproveConnectionWSPush(t *testing.T) {
 	}
 	defer wsConn.Close()
 
-	// Give the hub time to register
-	time.Sleep(100 * time.Millisecond)
+	// Drain entity.config
+	skipEntityConfig(t, wsConn)
 
 	// Approve connection via HTTP
 	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/approve", entityID), ptr(token), nil)
@@ -222,10 +222,10 @@ func TestWebhookOwnership(t *testing.T) {
 	// Create a second user
 	resp = doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "other-user",
-		"password": "otherpass",
+		"password": "Otherpass1",
 	})
 	assertStatus(t, resp, http.StatusCreated)
-	otherToken := login(t, "other-user", "otherpass")
+	otherToken := login(t, "other-user", "Otherpass1")
 
 	// Other user tries to delete admin's webhook — should fail
 	resp = doJSON(t, "DELETE", fmt.Sprintf("/api/v1/webhooks/%d", whID), ptr(otherToken), nil)
@@ -359,9 +359,9 @@ func TestUpdateEntityOwnershipCheck(t *testing.T) {
 	// Create another user
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "other",
-		"password": "other123",
+		"password": "Other123",
 	})
-	otherToken := login(t, "other", "other123")
+	otherToken := login(t, "other", "Other123")
 
 	// Other user tries to update — should fail
 	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(otherToken), map[string]interface{}{

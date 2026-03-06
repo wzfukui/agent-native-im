@@ -43,12 +43,12 @@ func TestCreateInviteLinkMemberForbidden(t *testing.T) {
 	// Create a regular member
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member",
-		"password": "member123",
+		"password": "Member123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member", "member123")
+	memberToken := login(t, "member", "Member123")
 
 	// Create conversation with member
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -126,9 +126,9 @@ func TestJoinViaInvite(t *testing.T) {
 	// Create a user to join
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "joiner",
-		"password": "joiner123",
+		"password": "Joiner123",
 	})
-	joinerToken := login(t, "joiner", "joiner123")
+	joinerToken := login(t, "joiner", "Joiner123")
 
 	// Create conversation
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -194,15 +194,15 @@ func TestJoinViaInviteMaxUsesReached(t *testing.T) {
 	// Create 2 users
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "user1",
-		"password": "user1pass",
+		"password": "User1pass1",
 	})
-	user1Token := login(t, "user1", "user1pass")
+	user1Token := login(t, "user1", "User1pass1")
 
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "user2",
-		"password": "user2pass",
+		"password": "User2pass1",
 	})
-	user2Token := login(t, "user2", "user2pass")
+	user2Token := login(t, "user2", "User2pass1")
 
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title": "Max Uses",

@@ -74,12 +74,12 @@ func TestLeaveConversation(t *testing.T) {
 	// Create a second user
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "leaver",
-		"password": "leaver123",
+		"password": "Leaver123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	leaverData := parseOK(t, resp)
 	leaverID := int(leaverData["id"].(float64))
-	leaverToken := login(t, "leaver", "leaver123")
+	leaverToken := login(t, "leaver", "Leaver123")
 
 	// Create group with leaver as participant
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -118,9 +118,9 @@ func TestLeaveConversationNotParticipant(t *testing.T) {
 	// Create user not in the conversation
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "outsider",
-		"password": "outsider123",
+		"password": "Outsider123",
 	})
-	outsiderToken := login(t, "outsider", "outsider123")
+	outsiderToken := login(t, "outsider", "Outsider123")
 
 	// Create conversation (only admin)
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -265,9 +265,9 @@ func TestArchiveNotParticipant(t *testing.T) {
 
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "archiver",
-		"password": "archiver123",
+		"password": "Archiver123",
 	})
-	archiverToken := login(t, "archiver", "archiver123")
+	archiverToken := login(t, "archiver", "Archiver123")
 
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title": "Not Mine",

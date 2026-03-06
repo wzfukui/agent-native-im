@@ -245,9 +245,9 @@ func TestTaskNotParticipant(t *testing.T) {
 	// Create second user
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "outsider",
-		"password": "outsider123",
+		"password": "Outsider123",
 	})
-	outsiderToken := login(t, "outsider", "outsider123")
+	outsiderToken := login(t, "outsider", "Outsider123")
 
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title": "Private Conv",

@@ -13,12 +13,12 @@ func TestCreateChangeRequest(t *testing.T) {
 	// Create second user (member)
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member1",
-		"password": "member123",
+		"password": "Member123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member1", "member123")
+	memberToken := login(t, "member1", "Member123")
 
 	// Create group with member
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -51,12 +51,12 @@ func TestListChangeRequests(t *testing.T) {
 
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member1",
-		"password": "member123",
+		"password": "Member123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member1", "member123")
+	memberToken := login(t, "member1", "Member123")
 
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title":           "CR List Test",
@@ -93,12 +93,12 @@ func TestApproveChangeRequest(t *testing.T) {
 
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member1",
-		"password": "member123",
+		"password": "Member123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member1", "member123")
+	memberToken := login(t, "member1", "Member123")
 
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title":           "Approve CR Test",
@@ -137,12 +137,12 @@ func TestRejectChangeRequest(t *testing.T) {
 
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member1",
-		"password": "member123",
+		"password": "Member123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member1", "member123")
+	memberToken := login(t, "member1", "Member123")
 
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title":           "Reject CR Test",
@@ -181,12 +181,12 @@ func TestChangeRequestMemberCannotApprove(t *testing.T) {
 
 	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "member1",
-		"password": "member123",
+		"password": "Member123",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	memberData := parseOK(t, resp)
 	memberID := int(memberData["id"].(float64))
-	memberToken := login(t, "member1", "member123")
+	memberToken := login(t, "member1", "Member123")
 
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title":           "No Approve Test",
@@ -216,9 +216,9 @@ func TestChangeRequestNotParticipant(t *testing.T) {
 
 	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
 		"username": "outsider",
-		"password": "outsider123",
+		"password": "Outsider123",
 	})
-	outsiderToken := login(t, "outsider", "outsider123")
+	outsiderToken := login(t, "outsider", "Outsider123")
 
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
 		"title": "Private Conv",
