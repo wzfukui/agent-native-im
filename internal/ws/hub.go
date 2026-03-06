@@ -34,6 +34,8 @@ type Hub struct {
 
 	lastSeen        map[int64]time.Time
 	disconnectCount map[int64]int
+	forcedMarked    map[*Client]bool
+	forcedCount     map[int64]int
 }
 
 func NewHub(st store.Store) *Hub {
@@ -46,6 +48,8 @@ func NewHub(st store.Store) *Hub {
 		waiters:         make(map[int64][]chan struct{}),
 		lastSeen:        make(map[int64]time.Time),
 		disconnectCount: make(map[int64]int),
+		forcedMarked:    make(map[*Client]bool),
+		forcedCount:     make(map[int64]int),
 	}
 }
 
@@ -78,6 +82,10 @@ func (h *Hub) Run() {
 				h.unsubscribeClientLocked(client)
 				h.lastSeen[client.entityID] = time.Now()
 				h.disconnectCount[client.entityID] = h.disconnectCount[client.entityID] + 1
+				if h.forcedMarked[client] {
+					h.forcedCount[client.entityID] = h.forcedCount[client.entityID] + 1
+					delete(h.forcedMarked, client)
+				}
 				stillOnline := h.isOnlineLocked(client.entityID)
 				total := len(h.clients)
 				h.mu.Unlock()
@@ -107,6 +115,13 @@ func (h *Hub) DisconnectCount(entityID int64) int {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	return h.disconnectCount[entityID]
+}
+
+// ForcedDisconnectCount returns disconnects initiated by server-side operations.
+func (h *Hub) ForcedDisconnectCount(entityID int64) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.forcedCount[entityID]
 }
 
 // DeviceInfo describes a connected device.
@@ -146,6 +161,9 @@ func (h *Hub) DisconnectDevice(entityID int64, deviceID string) int {
 	h.mu.RUnlock()
 
 	for _, client := range targets {
+		h.mu.Lock()
+		h.forcedMarked[client] = true
+		h.mu.Unlock()
 		h.unregister <- client
 	}
 	return len(targets)
@@ -164,6 +182,9 @@ func (h *Hub) DisconnectEntity(entityID int64) int {
 	h.mu.RUnlock()
 
 	for _, client := range targets {
+		h.mu.Lock()
+		h.forcedMarked[client] = true
+		h.mu.Unlock()
 		h.unregister <- client
 	}
 	return len(targets)

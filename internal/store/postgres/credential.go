@@ -55,3 +55,12 @@ func (s *PGStore) DeleteCredentialsByType(ctx context.Context, entityID int64, c
 		Exec(ctx)
 	return err
 }
+
+func (s *PGStore) DeleteCredentialsByTypeExceptHash(ctx context.Context, entityID int64, credType model.CredType, keepSecretHash string) error {
+	_, err := s.DB.NewDelete().Model((*model.Credential)(nil)).
+		Where("entity_id = ?", entityID).
+		Where("cred_type = ?", credType).
+		Where("secret_hash <> ?", keepSecretHash).
+		Exec(ctx)
+	return err
+}

@@ -361,18 +361,10 @@ func (s *Server) HandleApproveConnection(c *gin.Context) {
 
 // HandleEntityStatus returns the online status of an entity.
 func (s *Server) HandleEntityStatus(c *gin.Context) {
-	entityID, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil {
-		Fail(c, http.StatusBadRequest, "invalid entity id")
+	entity, entityID, ok := s.ensureOwnedEntity(c)
+	if !ok {
 		return
 	}
-
-	entity, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
-	if err != nil {
-		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
-		return
-	}
-
 	resp := gin.H{
 		"entity_id": entity.ID,
 		"name":      entity.DisplayName,
@@ -451,7 +443,7 @@ func (s *Server) ensureOwnedEntity(c *gin.Context) (*model.Entity, int64, bool) 
 	return target, entityID, true
 }
 
-func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (string, error) {
+func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (string, string, error) {
 	permanentKey := generateKey(keyPrefixPermanent)
 	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(permanentKey)))
 
@@ -462,9 +454,9 @@ func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (
 		RawPrefix:  permanentKey[:8],
 	}
 	if err := s.Store.CreateCredential(ctx, cred); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return permanentKey, nil
+	return permanentKey, keyHash, nil
 }
 
 // HandleEntitySelfCheck returns a lightweight readiness report for an agent.
@@ -521,13 +513,14 @@ func (s *Server) HandleEntityDiagnostics(c *gin.Context) {
 	devices := s.Hub.GetConnectedDevices(entityID)
 
 	resp := gin.H{
-		"entity_id":        entityID,
-		"entity_name":      target.DisplayName,
-		"status":           target.Status,
-		"online":           len(devices) > 0,
-		"connections":      len(devices),
-		"disconnect_count": s.Hub.DisconnectCount(entityID),
-		"devices":          devices,
+		"entity_id":               entityID,
+		"entity_name":             target.DisplayName,
+		"status":                  target.Status,
+		"online":                  len(devices) > 0,
+		"connections":             len(devices),
+		"disconnect_count":        s.Hub.DisconnectCount(entityID),
+		"forced_disconnect_count": s.Hub.ForcedDisconnectCount(entityID),
+		"devices":                 devices,
 		"credentials": gin.H{
 			"has_bootstrap": len(bootstrapCreds) > 0,
 			"has_api_key":   len(apiKeyCreds) > 0,
@@ -559,12 +552,16 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 		return
 	}
 
-	permanentKey, err := s.issuePermanentCredential(ctx, entityID)
+	permanentKey, keyHash, err := s.issuePermanentCredential(ctx, entityID)
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to create permanent credential")
 		return
 	}
 
+	if err := s.Store.DeleteCredentialsByTypeExceptHash(ctx, entityID, model.CredAPIKey, keyHash); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to revoke previous api keys")
+		return
+	}
 	disconnected := s.Hub.DisconnectEntity(entityID)
 
 	OK(c, http.StatusOK, gin.H{

@@ -1,12 +1,18 @@
 package handler
 
 import (
+	"crypto/rand"
+	"encoding/binary"
+	"encoding/json"
 	"fmt"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
@@ -51,6 +57,29 @@ type createConversationRequest struct {
 	ParticipantIDs []int64 `json:"participant_ids"`
 }
 
+func generateConversationID() int64 {
+	var b [8]byte
+	maxSafeInt := uint64(math.MaxInt64)
+	if (1 << 53) < maxSafeInt {
+		maxSafeInt = (1 << 53) - 1
+	}
+	for i := 0; i < 5; i++ {
+		if _, err := rand.Read(b[:]); err != nil {
+			break
+		}
+		// Positive non-zero random ID constrained to JS safe integer range.
+		id := binary.BigEndian.Uint64(b[:]) & maxSafeInt
+		if id != 0 {
+			return int64(id)
+		}
+	}
+	// Fallback for rare entropy source errors.
+	if fallback := time.Now().UnixNano() & int64(maxSafeInt); fallback > 0 {
+		return fallback
+	}
+	return 1
+}
+
 func (s *Server) HandleCreateConversation(c *gin.Context) {
 	var req createConversationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -69,10 +98,13 @@ func (s *Server) HandleCreateConversation(c *gin.Context) {
 	}
 
 	conv := &model.Conversation{
+		ID:          generateConversationID(),
 		ConvType:    convType,
 		Title:       req.Title,
 		Description: req.Description,
 	}
+	meta, _ := json.Marshal(map[string]interface{}{"public_id": uuid.NewString()})
+	conv.Metadata = meta
 
 	if err := s.Store.CreateConversation(ctx, conv); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to create conversation")

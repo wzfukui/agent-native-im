@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestCreateConversation(t *testing.T) {
@@ -19,6 +21,11 @@ func TestCreateConversation(t *testing.T) {
 	data := parseOK(t, resp)
 	if data["title"] != "Test Chat" {
 		t.Fatalf("expected title=Test Chat, got %v", data["title"])
+	}
+	meta, _ := data["metadata"].(map[string]interface{})
+	publicID, _ := meta["public_id"].(string)
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid metadata.public_id UUID, got %q", publicID)
 	}
 }
 

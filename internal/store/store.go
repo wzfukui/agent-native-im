@@ -55,6 +55,7 @@ type CredentialStore interface {
 	DeleteCredentialsByEntity(ctx context.Context, entityID int64) error
 	DeleteCredential(ctx context.Context, credentialID int64) error
 	DeleteCredentialsByType(ctx context.Context, entityID int64, credType model.CredType) error
+	DeleteCredentialsByTypeExceptHash(ctx context.Context, entityID int64, credType model.CredType, keepSecretHash string) error
 }
 
 type ConversationStore interface {

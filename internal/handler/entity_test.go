@@ -206,6 +206,28 @@ func TestEntityStatus(t *testing.T) {
 	}
 }
 
+func TestEntityStatusOwnership(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	// Create bot by admin
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(adminToken), map[string]string{"name": "owned-status-agent"})
+	assertStatus(t, resp, http.StatusCreated)
+	entityID := int(parseOK(t, resp)["entity"].(map[string]interface{})["id"].(float64))
+
+	// Create other user
+	resp = doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "status-other-user",
+		"password": "Otherpass1",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	otherToken := login(t, "status-other-user", "Otherpass1")
+
+	// Non-owner should be forbidden
+	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/entities/%d/status", entityID), ptr(otherToken), nil)
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestEntitySelfCheckAndDiagnostics(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
@@ -280,6 +302,25 @@ func TestRegenerateEntityToken(t *testing.T) {
 	assertStatus(t, resp, http.StatusUnauthorized)
 	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(secondKey), nil)
 	assertStatus(t, resp, http.StatusOK)
+}
+
+func TestRegenerateEntityTokenOwnership(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(adminToken), map[string]string{"name": "regen-owned-agent"})
+	assertStatus(t, resp, http.StatusCreated)
+	entityID := int(parseOK(t, resp)["entity"].(map[string]interface{})["id"].(float64))
+
+	resp = doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "regen-other-user",
+		"password": "Otherpass1",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	otherToken := login(t, "regen-other-user", "Otherpass1")
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/regenerate-token", entityID), ptr(otherToken), nil)
+	assertStatus(t, resp, http.StatusForbidden)
 }
 
 func TestWebhookOwnership(t *testing.T) {

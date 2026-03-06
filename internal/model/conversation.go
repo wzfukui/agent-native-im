@@ -24,8 +24,8 @@ type Conversation struct {
 	Description string          `bun:"description,notnull,default:''" json:"description"`
 	Prompt      string          `bun:"prompt,notnull,default:''" json:"prompt"`
 	Metadata    json.RawMessage `bun:"metadata,type:jsonb,notnull,default:'{}'" json:"metadata,omitempty"`
-	CreatedAt time.Time       `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`
-	UpdatedAt time.Time       `bun:"updated_at,nullzero,notnull,default:now()" json:"updated_at"`
+	CreatedAt   time.Time       `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`
+	UpdatedAt   time.Time       `bun:"updated_at,nullzero,notnull,default:now()" json:"updated_at"`
 
 	Participants []*Participant `bun:"rel:has-many,join:id=conversation_id" json:"participants,omitempty"`
 }
