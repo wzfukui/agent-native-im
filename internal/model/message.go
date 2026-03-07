@@ -16,8 +16,9 @@ const (
 	ContentImage    ContentType = "image"
 	ContentAudio    ContentType = "audio"
 	ContentFile     ContentType = "file"
-	ContentArtifact ContentType = "artifact"
-	ContentSystem   ContentType = "system"
+	ContentArtifact      ContentType = "artifact"
+	ContentSystem        ContentType = "system"
+	ContentTaskHandover  ContentType = "task_handover"
 )
 
 type StatusLayer struct {
