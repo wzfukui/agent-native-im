@@ -93,6 +93,36 @@ func TestSearchEntitiesMissingParam(t *testing.T) {
 	assertStatus(t, resp, http.StatusBadRequest)
 }
 
+func TestSearchEntitiesInjectionSafe(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	// Attempt SQL injection via crafted capability string — should return empty, not error
+	resp := doJSON(t, "GET", `/api/v1/entities/search?capability="]--`, ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	result := parseResponse(t, resp)
+	entities, ok := result["data"].([]interface{})
+	if !ok {
+		t.Fatalf("expected array data, got %T", result["data"])
+	}
+	if len(entities) != 0 {
+		t.Fatalf("expected 0 entities for injection attempt, got %d", len(entities))
+	}
+}
+
+func TestSearchEntitiesCapabilityTooLong(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	long := ""
+	for i := 0; i < 101; i++ {
+		long += "x"
+	}
+	resp := doJSON(t, "GET", "/api/v1/entities/search?capability="+long, ptr(token), nil)
+	assertStatus(t, resp, http.StatusBadRequest)
+}
+
 func TestSearchEntitiesExcludesDisabled(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
