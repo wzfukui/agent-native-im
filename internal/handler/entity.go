@@ -345,13 +345,15 @@ func (s *Server) HandleApproveConnection(c *gin.Context) {
 	}
 
 	// Push new key to the Agent via WebSocket
-	s.Hub.SendToEntity(entityID, ws.WSMessage{
-		Type: "connection.approved",
-		Data: gin.H{
-			"api_key": permanentKey,
-			"message": "Connection approved. Use this permanent key for all future requests.",
-		},
-	})
+	if s.Hub != nil {
+		s.Hub.SendToEntity(entityID, ws.WSMessage{
+			Type: "connection.approved",
+			Data: gin.H{
+				"api_key": permanentKey,
+				"message": "Connection approved. Use this permanent key for all future requests.",
+			},
+		})
+	}
 
 	OK(c, http.StatusOK, gin.H{
 		"message": "connection approved",
@@ -543,8 +545,17 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredAPIKey); err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to revoke previous api key")
+
+	// Create new credential FIRST, so entity always has at least one valid key.
+	permanentKey, keyHash, err := s.issuePermanentCredential(ctx, entityID)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to create permanent credential")
+		return
+	}
+
+	// Now revoke all old credentials (API keys and bootstrap keys) except the new one.
+	if err := s.Store.DeleteCredentialsByTypeExceptHash(ctx, entityID, model.CredAPIKey, keyHash); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to revoke previous api keys")
 		return
 	}
 	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredBootstrap); err != nil {
@@ -552,17 +563,10 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 		return
 	}
 
-	permanentKey, keyHash, err := s.issuePermanentCredential(ctx, entityID)
-	if err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to create permanent credential")
-		return
+	disconnected := 0
+	if s.Hub != nil {
+		disconnected = s.Hub.DisconnectEntity(entityID)
 	}
-
-	if err := s.Store.DeleteCredentialsByTypeExceptHash(ctx, entityID, model.CredAPIKey, keyHash); err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to revoke previous api keys")
-		return
-	}
-	disconnected := s.Hub.DisconnectEntity(entityID)
 
 	OK(c, http.StatusOK, gin.H{
 		"message":      "token regenerated",

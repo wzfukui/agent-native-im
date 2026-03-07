@@ -43,7 +43,7 @@ func NewHub(st store.Store) *Hub {
 		store:           st,
 		clients:         make(map[*Client]bool),
 		register:        make(chan *Client),
-		unregister:      make(chan *Client),
+		unregister:      make(chan *Client, 64),
 		convClients:     make(map[int64]map[*Client]bool),
 		waiters:         make(map[int64][]chan struct{}),
 		lastSeen:        make(map[int64]time.Time),
