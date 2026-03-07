@@ -42,6 +42,7 @@ type EntityStore interface {
 	GetEntityByName(ctx context.Context, name string, entityType model.EntityType) (*model.Entity, error)
 	ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*model.Entity, error)
 	ListAllEntities(ctx context.Context, limit, offset int) ([]*model.Entity, int, error)
+	SearchEntitiesByCapability(ctx context.Context, capability string) ([]*model.Entity, error)
 	UpdateEntity(ctx context.Context, entity *model.Entity) error
 	DeleteEntity(ctx context.Context, id int64) error
 	ReactivateEntity(ctx context.Context, id int64) error

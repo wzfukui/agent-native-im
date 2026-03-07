@@ -13,6 +13,7 @@ const (
 	TaskInProgress TaskStatus = "in_progress"
 	TaskDone       TaskStatus = "done"
 	TaskCancelled  TaskStatus = "cancelled"
+	TaskHandedOver TaskStatus = "handed_over"
 )
 
 type TaskPriority string

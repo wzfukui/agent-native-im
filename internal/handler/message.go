@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -9,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
+	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
 type sendMessageRequest struct {
@@ -90,6 +94,11 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 	// Deliver webhooks
 	if s.Webhook != nil {
 		s.Webhook.DeliverAsync(msg)
+	}
+
+	// Process task_handover side effects
+	if contentType == model.ContentTaskHandover {
+		s.processTaskHandover(ctx, msg)
 	}
 
 	OK(c, http.StatusCreated, msg)
@@ -386,4 +395,49 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 		"messages": msgs,
 		"has_more": hasMore,
 	})
+}
+
+// processTaskHandover handles side-effects when a task_handover message is sent.
+// It updates the referenced task's status and sends a dedicated WS event.
+func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
+	// Parse layers.data to extract handover info
+	var data struct {
+		HandoverType string  `json:"handover_type"`
+		TaskID       *int64  `json:"task_id"`
+		AssignTo     []int64 `json:"assign_to"`
+	}
+	if len(msg.Layers.Data) > 0 {
+		if err := json.Unmarshal(msg.Layers.Data, &data); err != nil {
+			log.Printf("handler: failed to parse task_handover data: %v", err)
+			return
+		}
+	}
+
+	// Update referenced task status to handed_over
+	if data.TaskID != nil {
+		task, err := s.Store.GetTask(ctx, *data.TaskID)
+		if err == nil && task != nil && task.ConversationID == msg.ConversationID {
+			task.Status = model.TaskHandedOver
+			if err := s.Store.UpdateTask(ctx, task); err != nil {
+				log.Printf("handler: failed to update task %d status: %v", *data.TaskID, err)
+			}
+		}
+	}
+
+	// Send dedicated task.handover WS event to assigned entities
+	if s.Hub != nil && len(data.AssignTo) > 0 {
+		event := ws.WSMessage{
+			Type: "task.handover",
+			Data: gin.H{
+				"message_id":      msg.ID,
+				"conversation_id": msg.ConversationID,
+				"sender_id":       msg.SenderID,
+				"handover_type":   data.HandoverType,
+				"task_id":         data.TaskID,
+			},
+		}
+		for _, entityID := range data.AssignTo {
+			s.Hub.SendToEntity(entityID, event)
+		}
+	}
 }

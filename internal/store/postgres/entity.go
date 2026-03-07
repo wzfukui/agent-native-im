@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/uptrace/bun"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
@@ -56,6 +57,23 @@ func (s *PGStore) ListAllEntities(ctx context.Context, limit, offset int) ([]*mo
 		Offset(offset).
 		ScanAndCount(ctx)
 	return entities, count, err
+}
+
+func (s *PGStore) SearchEntitiesByCapability(ctx context.Context, capability string) ([]*model.Entity, error) {
+	var entities []*model.Entity
+	// Search in metadata->capabilities->skills jsonb array for the given capability string.
+	// Also search in metadata->tags for backward compatibility.
+	err := s.DB.NewSelect().Model(&entities).
+		Where("status = ?", "active").
+		Where("entity_type IN (?, ?)", model.EntityBot, model.EntityService).
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.
+				Where("metadata->'capabilities'->'skills' @> ?::jsonb", `["`+capability+`"]`).
+				WhereOr("metadata->'tags' @> ?::jsonb", `["`+capability+`"]`)
+		}).
+		OrderExpr("created_at DESC").
+		Scan(ctx)
+	return entities, err
 }
 
 func (s *PGStore) DeleteEntity(ctx context.Context, id int64) error {

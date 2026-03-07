@@ -617,6 +617,39 @@ func (s *Server) HandleKickDevice(c *gin.Context) {
 	OK(c, http.StatusOK, gin.H{"disconnected": n})
 }
 
+// HandleSearchEntities searches for entities by capability (metadata.capabilities.skills or metadata.tags).
+func (s *Server) HandleSearchEntities(c *gin.Context) {
+	capability := c.Query("capability")
+	if capability == "" {
+		Fail(c, http.StatusBadRequest, "query parameter 'capability' is required")
+		return
+	}
+
+	entities, err := s.Store.SearchEntitiesByCapability(c.Request.Context(), capability)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "search failed")
+		return
+	}
+	if entities == nil {
+		entities = []*model.Entity{}
+	}
+
+	type entityWithStatus struct {
+		*model.Entity
+		Online bool `json:"online"`
+	}
+
+	result := make([]entityWithStatus, len(entities))
+	for i, e := range entities {
+		result[i] = entityWithStatus{
+			Entity: e,
+			Online: s.Hub.IsOnline(e.ID),
+		}
+	}
+
+	OK(c, http.StatusOK, result)
+}
+
 // HandleListEntities lists entities owned by the authenticated user, with online status.
 func (s *Server) HandleListEntities(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
