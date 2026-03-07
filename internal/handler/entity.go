@@ -624,6 +624,10 @@ func (s *Server) HandleSearchEntities(c *gin.Context) {
 		Fail(c, http.StatusBadRequest, "query parameter 'capability' is required")
 		return
 	}
+	if len(capability) > 100 {
+		Fail(c, http.StatusBadRequest, "capability must be 100 characters or less")
+		return
+	}
 
 	entities, err := s.Store.SearchEntitiesByCapability(c.Request.Context(), capability)
 	if err != nil {

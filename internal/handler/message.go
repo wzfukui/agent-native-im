@@ -400,7 +400,6 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 // processTaskHandover handles side-effects when a task_handover message is sent.
 // It updates the referenced task's status and sends a dedicated WS event.
 func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
-	// Parse layers.data to extract handover info
 	var data struct {
 		HandoverType string  `json:"handover_type"`
 		TaskID       *int64  `json:"task_id"`
@@ -408,7 +407,7 @@ func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
 	}
 	if len(msg.Layers.Data) > 0 {
 		if err := json.Unmarshal(msg.Layers.Data, &data); err != nil {
-			log.Printf("handler: failed to parse task_handover data: %v", err)
+			log.Printf("handler: failed to parse task_handover data for msg %d: %v", msg.ID, err)
 			return
 		}
 	}
@@ -416,16 +415,22 @@ func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
 	// Update referenced task status to handed_over
 	if data.TaskID != nil {
 		task, err := s.Store.GetTask(ctx, *data.TaskID)
-		if err == nil && task != nil && task.ConversationID == msg.ConversationID {
+		if err != nil {
+			log.Printf("handler: task_handover lookup failed for task %d: %v", *data.TaskID, err)
+		} else if task != nil && task.ConversationID == msg.ConversationID {
 			task.Status = model.TaskHandedOver
 			if err := s.Store.UpdateTask(ctx, task); err != nil {
-				log.Printf("handler: failed to update task %d status: %v", *data.TaskID, err)
+				log.Printf("handler: failed to update task %d to handed_over: %v", *data.TaskID, err)
 			}
 		}
 	}
 
-	// Send dedicated task.handover WS event to assigned entities
+	// Send dedicated task.handover WS event to assigned entities (cap at 50)
 	if s.Hub != nil && len(data.AssignTo) > 0 {
+		assignees := data.AssignTo
+		if len(assignees) > 50 {
+			assignees = assignees[:50]
+		}
 		event := ws.WSMessage{
 			Type: "task.handover",
 			Data: gin.H{
@@ -436,7 +441,7 @@ func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
 				"task_id":         data.TaskID,
 			},
 		}
-		for _, entityID := range data.AssignTo {
+		for _, entityID := range assignees {
 			s.Hub.SendToEntity(entityID, event)
 		}
 	}

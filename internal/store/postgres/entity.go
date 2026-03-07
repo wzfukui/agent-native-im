@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -60,16 +61,21 @@ func (s *PGStore) ListAllEntities(ctx context.Context, limit, offset int) ([]*mo
 }
 
 func (s *PGStore) SearchEntitiesByCapability(ctx context.Context, capability string) ([]*model.Entity, error) {
+	// Use json.Marshal to safely encode the capability string, preventing SQL injection
+	// via crafted jsonb literals (e.g. capability = `"]--`).
+	safeJSON, err := json.Marshal([]string{capability})
+	if err != nil {
+		return nil, err
+	}
+
 	var entities []*model.Entity
-	// Search in metadata->capabilities->skills jsonb array for the given capability string.
-	// Also search in metadata->tags for backward compatibility.
-	err := s.DB.NewSelect().Model(&entities).
+	err = s.DB.NewSelect().Model(&entities).
 		Where("status = ?", "active").
 		Where("entity_type IN (?, ?)", model.EntityBot, model.EntityService).
 		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
 			return q.
-				Where("metadata->'capabilities'->'skills' @> ?::jsonb", `["`+capability+`"]`).
-				WhereOr("metadata->'tags' @> ?::jsonb", `["`+capability+`"]`)
+				Where("metadata->'capabilities'->'skills' @> ?::jsonb", string(safeJSON)).
+				WhereOr("metadata->'tags' @> ?::jsonb", string(safeJSON))
 		}).
 		OrderExpr("created_at DESC").
 		Scan(ctx)
