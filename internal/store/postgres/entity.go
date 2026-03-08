@@ -35,6 +35,18 @@ func (s *PGStore) GetEntityByName(ctx context.Context, name string, entityType m
 	return entity, nil
 }
 
+func (s *PGStore) GetEntityByEmail(ctx context.Context, email string) (*model.Entity, error) {
+	entity := new(model.Entity)
+	err := s.DB.NewSelect().Model(entity).
+		Where("email = ?", email).
+		Where("email != ''").
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
 func (s *PGStore) ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*model.Entity, error) {
 	var entities []*model.Entity
 	err := s.DB.NewSelect().Model(&entities).

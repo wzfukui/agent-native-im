@@ -40,6 +40,7 @@ type EntityStore interface {
 	CreateEntity(ctx context.Context, entity *model.Entity) error
 	GetEntityByID(ctx context.Context, id int64) (*model.Entity, error)
 	GetEntityByName(ctx context.Context, name string, entityType model.EntityType) (*model.Entity, error)
+	GetEntityByEmail(ctx context.Context, email string) (*model.Entity, error)
 	ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*model.Entity, error)
 	ListAllEntities(ctx context.Context, limit, offset int) ([]*model.Entity, int, error)
 	SearchEntitiesByCapability(ctx context.Context, capability string) ([]*model.Entity, error)

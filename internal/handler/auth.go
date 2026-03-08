@@ -60,7 +60,20 @@ func (s *Server) HandleLogin(c *gin.Context) {
 		return
 	}
 
-	entity, err := s.Store.GetEntityByName(c.Request.Context(), req.Username, model.EntityUser)
+	ctx := c.Request.Context()
+
+	// Smart login: if input contains '@', try email first, then username
+	var entity *model.Entity
+	var err error
+	if strings.Contains(req.Username, "@") {
+		entity, err = s.Store.GetEntityByEmail(ctx, req.Username)
+		if err != nil {
+			// Fallback to username lookup
+			entity, err = s.Store.GetEntityByName(ctx, req.Username, model.EntityUser)
+		}
+	} else {
+		entity, err = s.Store.GetEntityByName(ctx, req.Username, model.EntityUser)
+	}
 	if err != nil {
 		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthInvalid, "invalid credentials")
 		return
@@ -145,13 +158,14 @@ func (s *Server) HandleUpdateProfile(c *gin.Context) {
 	var req struct {
 		DisplayName *string `json:"display_name"`
 		AvatarURL   *string `json:"avatar_url"`
+		Email       *string `json:"email"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if req.DisplayName == nil && req.AvatarURL == nil {
+	if req.DisplayName == nil && req.AvatarURL == nil && req.Email == nil {
 		Fail(c, http.StatusBadRequest, "nothing to update")
 		return
 	}
@@ -170,6 +184,17 @@ func (s *Server) HandleUpdateProfile(c *gin.Context) {
 	}
 	if req.AvatarURL != nil {
 		entity.AvatarURL = *req.AvatarURL
+	}
+	if req.Email != nil {
+		email := strings.TrimSpace(*req.Email)
+		if email != "" {
+			existing, _ := s.Store.GetEntityByEmail(ctx, email)
+			if existing != nil && existing.ID != entityID {
+				FailWithCode(c, http.StatusConflict, ErrCodeDuplicateUser, "email already in use")
+				return
+			}
+		}
+		entity.Email = email
 	}
 
 	if err := s.Store.UpdateEntity(ctx, entity); err != nil {
@@ -329,6 +354,16 @@ func (s *Server) HandleRegister(c *gin.Context) {
 		return
 	}
 
+	// Check email uniqueness if provided
+	email := strings.TrimSpace(req.Email)
+	if email != "" {
+		existingByEmail, _ := s.Store.GetEntityByEmail(c.Request.Context(), email)
+		if existingByEmail != nil {
+			FailWithCode(c, http.StatusConflict, ErrCodeDuplicateUser, "email already registered")
+			return
+		}
+	}
+
 	ctx := c.Request.Context()
 
 	displayName := req.DisplayName
@@ -339,6 +374,7 @@ func (s *Server) HandleRegister(c *gin.Context) {
 	entity := &model.Entity{
 		EntityType:  model.EntityUser,
 		Name:        req.Username,
+		Email:       email,
 		DisplayName: displayName,
 		Status:      "active",
 	}

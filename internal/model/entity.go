@@ -21,6 +21,7 @@ type Entity struct {
 	ID          int64           `bun:"id,pk,autoincrement" json:"id"`
 	EntityType  EntityType      `bun:"entity_type,notnull" json:"entity_type"`
 	Name        string          `bun:"name,notnull" json:"name"`
+	Email       string          `bun:"email" json:"email,omitempty"`
 	DisplayName string          `bun:"display_name,notnull" json:"display_name"`
 	AvatarURL   string          `bun:"avatar_url,notnull" json:"avatar_url,omitempty"`
 	Status      string          `bun:"status,notnull,default:'active'" json:"status"`
