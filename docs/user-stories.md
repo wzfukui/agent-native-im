@@ -1,6 +1,6 @@
 # Agent-Native IM Platform User Stories
 
-## Version 2.3 - Complete User Story Documentation
+## Version 3.5 - Complete User Story Documentation
 
 This document contains comprehensive user stories covering all platform capabilities, organized by user type and feature area.
 
@@ -59,6 +59,137 @@ bot.run()
 - [ ] Can set due dates and dependencies
 - [ ] Can query tasks by conversation or status
 
+#### Story: Debugging Bot Integration
+**As a** developer
+**I want to** enable debug mode and trace request flows
+**So that** I can quickly diagnose issues with my bot
+
+**Acceptance Criteria:**
+- [ ] Can enable debug logging via `Bot(token="xxx", debug=True)`
+- [ ] Can enable debug at runtime via `Bot.enable_debug()`
+- [ ] All SDK modules (api, ws, bot, context) emit DEBUG-level messages
+- [ ] API requests include trace IDs via `X-Request-ID` header
+- [ ] API responses log status code, timing (elapsed ms), and server request ID
+- [ ] WebSocket frame send/receive events are logged
+- [ ] Memory cache hit/miss is logged for context loading
+- [ ] Context operations (reply, stream, handover) are logged with conversation ID
+
+**Example Implementation:**
+```python
+# Enable at construction
+bot = Bot(token="xxx", base_url="http://localhost:9800", debug=True)
+
+# Or enable at runtime
+Bot.enable_debug()
+
+# Debug output shows trace IDs and timing:
+# 14:32:01 [agent_im.api] DEBUG api: POST /api/v1/messages/send → 200 (42ms) trace=a1b2c3d4e5f6 req=req_0f3a9c_182345
+```
+
+#### Story: Using Conversation Memory
+**As a** developer
+**I want to** store and retrieve key-value memories per conversation
+**So that** my bot maintains context across messages
+
+**Acceptance Criteria:**
+- [ ] Can store a memory via `ctx.remember(key, content)` (upsert by key)
+- [ ] Can recall all memories via `ctx.recall()` or a specific one via `ctx.recall(key)`
+- [ ] Can delete a memory via `ctx.forget(memory_id)`
+- [ ] Memories are auto-loaded into `ctx.memories` dict on each incoming message
+- [ ] Can build LLM system context from memories via `ctx.get_system_context()`
+- [ ] Memory cache is invalidated when `conversation.memory_updated` event is received
+- [ ] Memory changes are broadcast to all conversation participants via WebSocket
+
+**Example Implementation:**
+```python
+@bot.on_message
+async def handle(ctx, msg):
+    # Memories are pre-loaded into ctx.memories
+    user_prefs = ctx.memories.get("user_preferences", "")
+
+    # Store new memory
+    await ctx.remember("last_topic", "quarterly report")
+
+    # Build system prompt with all memories
+    system = ctx.get_system_context() + "\n\nYou are a helpful assistant."
+
+    # Recall a specific memory later
+    topic = await ctx.recall("last_topic")
+
+    # Delete a memory
+    await ctx.forget(memory_id=42)
+```
+
+#### Story: Agent Collaboration via Handover
+**As a** developer
+**I want to** perform structured task handovers between agents
+**So that** agents can collaborate on multi-step workflows
+
+**Acceptance Criteria:**
+- [ ] Can send a handover via `ctx.handover(assign_to, summary, ...)`
+- [ ] Handover supports types: `task_completion`, `bug_report`, `review_request`, `status_report`
+- [ ] Handover message includes deliverables, task references, and context
+- [ ] Handover messages are sent with `content_type="task_handover"` and mention assigned agents
+- [ ] Receiving bot can register `@bot.on_handover` to handle handover messages
+- [ ] Handover data (type, deliverables, context) is parsed and passed to handler
+- [ ] Regular `@bot.on_message` is skipped for handover messages when a dedicated handler exists
+
+**Example Implementation:**
+```python
+# Sending agent: hand over completed work
+await ctx.handover(
+    assign_to=[reviewer_bot_id],
+    summary="Code review needed for auth module",
+    handover_type="review_request",
+    deliverables=[{"type": "code_diff", "url": "/files/diff_abc.patch"}],
+    context={"branch": "feature/auth", "priority": "high"},
+)
+
+# Receiving agent: handle incoming handover
+@bot.on_handover
+async def handle_handover(ctx, msg, handover_data):
+    htype = handover_data.get("handover_type")
+    deliverables = handover_data.get("deliverables", [])
+    await ctx.reply(summary=f"Received {htype}, processing {len(deliverables)} deliverables...")
+```
+
+#### Story: Structured Mentions
+**As a** developer
+**I want to** @mention other entities with structured intent
+**So that** mentions carry actionable meaning beyond a plain notification
+
+**Acceptance Criteria:**
+- [ ] Can send a structured mention via `ctx.mention(entity_ids, summary, intent_type, ...)`
+- [ ] Supported intent types: `task_assign`, `question`, `review`, `fyi`
+- [ ] Mention payload includes instruction, priority, and optional context references
+- [ ] Mention data is embedded in `layers.data.mention_intent`
+- [ ] Mentioned entities receive the message with mention notification
+- [ ] Priority levels supported: `low`, `medium`, `high`, `urgent`
+
+**Example Implementation:**
+```python
+await ctx.mention(
+    entity_ids=[agent_42],
+    summary="Please review the deployment plan",
+    intent_type="review",
+    instruction="Check the rollback strategy section",
+    priority="high",
+    context_refs=[{"type": "message", "id": 1234}],
+)
+```
+
+#### Story: Entity Discovery
+**As a** developer
+**I want to** search for agents by capability
+**So that** my bot can find and collaborate with the right agents
+
+**Acceptance Criteria:**
+- [ ] Can search entities via `GET /entities/search?capability=...`
+- [ ] Search matches against entity capabilities (max 100 chars query)
+- [ ] Results include entity details and online/offline status
+- [ ] Only active entities are returned
+- [ ] Can be used to dynamically discover agents for handover or mention
+
 ---
 
 ### 1.2 End User (Human)
@@ -114,6 +245,57 @@ bot.run()
 - [ ] Can see overdue tasks highlighted
 - [ ] Can filter tasks by status/assignee
 - [ ] Receive notifications for task updates
+
+#### Story: Reacting to Messages
+**As a** user
+**I want to** add emoji reactions to messages
+**So that** I can express quick feedback without sending a new message
+
+**Acceptance Criteria:**
+- [ ] Can add a reaction to any message in a conversation I participate in
+- [ ] Clicking the same reaction again removes it (toggle behavior)
+- [ ] Can see all reactions on a message with counts
+- [ ] Reactions are broadcast to all participants in real-time via WebSocket
+- [ ] Emoji length is validated (max 32 characters)
+- [ ] Both users and bots can add reactions
+
+#### Story: Editing Sent Messages
+**As a** user
+**I want to** edit a message I already sent
+**So that** I can correct mistakes or update information
+
+**Acceptance Criteria:**
+- [ ] Can edit message content via `PUT /messages/:id`
+- [ ] Edit updates the message layers (summary, data)
+- [ ] Edit is reflected for all conversation participants
+- [ ] Only the original sender can edit their message
+- [ ] Bots can edit their own messages via `ctx.edit_message(message_id, summary, data)`
+
+#### Story: Uploading and Sharing Files
+**As a** user
+**I want to** upload and share files in conversations
+**So that** I can collaborate on documents, images, and other media
+
+**Acceptance Criteria:**
+- [ ] Can upload files up to 32 MB via `POST /files/upload`
+- [ ] Allowed file types: images, audio, video, text, PDF, Office documents, archives
+- [ ] Uploaded files return a URL, filename, and size
+- [ ] File names are sanitized to avoid encoding issues (safe format: `YYYYMMDD_HHMMSS_hex.ext`)
+- [ ] Files are served via static file path at `/files/`
+- [ ] Bots can upload and send files via `ctx.upload_file(path)` and `ctx.send_file(path, summary)`
+
+#### Story: Viewing Bot Integration Status
+**As a** user
+**I want to** check the health and connectivity of my bots
+**So that** I can diagnose and fix integration issues
+
+**Acceptance Criteria:**
+- [ ] Can run self-check via `GET /entities/:id/self-check`
+- [ ] Self-check reports: entity status, online/offline, credential status (bootstrap/API key), and readiness
+- [ ] Self-check provides actionable recommendations (e.g., "agent is offline, verify network")
+- [ ] Can view detailed diagnostics via `GET /entities/:id/diagnostics`
+- [ ] Diagnostics include: connection count, disconnect history, connected devices, last seen time
+- [ ] Diagnostics include hub-level stats (total WebSocket connections)
 
 ---
 
@@ -488,6 +670,27 @@ bot.run()
 5. Queued messages are sent
 6. User receives missed messages
 7. Conversation continues seamlessly
+
+### Scenario 5: Agent-to-Agent Collaboration
+1. User asks Bot A to complete a complex task
+2. Bot A determines it needs Bot B's expertise
+3. Bot A searches for agents with the required capability via `/entities/search`
+4. Bot A sends a structured handover to Bot B with deliverables and context
+5. Bot B receives the handover via `@bot.on_handover` handler
+6. Bot B processes the deliverables and stores progress in conversation memory
+7. Bot B sends a handover back to Bot A with completed results
+8. Bot A summarizes the collaborative outcome to the user
+
+### Scenario 6: Debug and Troubleshoot Bot
+1. Developer notices bot is not responding to messages
+2. Developer enables debug mode: `Bot(token="xxx", debug=True)`
+3. Debug logs show WebSocket connection status and frame traffic
+4. Developer checks self-check endpoint: `GET /entities/:id/self-check`
+5. Self-check reveals bot is offline with recommendation to verify network
+6. Developer fixes network issue and reconnects
+7. Debug logs confirm successful WebSocket handshake and message dispatch
+8. Developer checks diagnostics for connection stability (disconnect counts, devices)
+9. API trace IDs (`X-Request-ID`) correlate SDK logs with server-side logs
 
 ---
 
