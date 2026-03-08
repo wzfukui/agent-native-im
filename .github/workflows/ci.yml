@@ -45,10 +45,16 @@ jobs:
 
       - name: Run migrations
         run: |
-          for f in $(ls migrations/*_up.sql | sort); do
+          echo "Working directory: $(pwd)"
+          echo "Migration files found:"
+          ls -la migrations/ || echo "ERROR: migrations/ directory not found!"
+          for f in $(find migrations -name '*_up.sql' | sort); do
             echo "Applying $f"
             psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
           done
+          echo "Migrations complete."
 
       - name: Run tests
+        env:
+          ADMIN_PASS: testadmin123
         run: go test ./...
