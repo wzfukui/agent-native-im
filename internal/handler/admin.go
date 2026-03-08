@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // HandleAdminListUsers lists all entities with pagination.
@@ -146,6 +147,67 @@ func (s *Server) HandleAdminListConversations(c *gin.Context) {
 		"limit":         limit,
 		"offset":        offset,
 	})
+}
+
+// HandleAdminResetPassword resets a user's password. Admin only.
+func (s *Server) HandleAdminResetPassword(c *gin.Context) {
+	var req struct {
+		EntityID    int64  `json:"entity_id" binding:"required"`
+		NewPassword string `json:"new_password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, "entity_id and new_password are required")
+		return
+	}
+
+	// Validate password strength using the same rules as registration
+	if err := validatePassword(req.NewPassword); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Prevent resetting own password via admin endpoint
+	if req.EntityID == auth.GetEntityID(c) {
+		Fail(c, http.StatusBadRequest, "use PUT /me/password to change your own password")
+		return
+	}
+
+	ctx := c.Request.Context()
+
+	// Verify entity exists
+	target, err := s.Store.GetEntityByID(ctx, req.EntityID)
+	if err != nil {
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
+		return
+	}
+
+	// Only allow resetting passwords for user entities
+	if target.EntityType != model.EntityUser {
+		Fail(c, http.StatusBadRequest, "can only reset passwords for user entities")
+		return
+	}
+
+	// Look up existing password credential
+	creds, err := s.Store.GetCredentialsByEntity(ctx, req.EntityID, model.CredPassword)
+	if err != nil || len(creds) == 0 {
+		Fail(c, http.StatusBadRequest, "entity has no password credential")
+		return
+	}
+
+	// Hash new password and update
+	newHash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to hash password")
+		return
+	}
+
+	creds[0].SecretHash = string(newHash)
+	if err := s.Store.UpdateCredential(ctx, creds[0]); err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to update password")
+		return
+	}
+
+	OK(c, http.StatusOK, gin.H{"message": "password reset successfully", "entity_id": req.EntityID})
 }
 
 // HandleAdminListAuditLogs returns audit log entries with filtering.
