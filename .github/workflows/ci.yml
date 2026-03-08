@@ -44,15 +44,17 @@ jobs:
           exit 1
 
       - name: Run migrations
+        shell: bash
         run: |
-          echo "Working directory: $(pwd)"
-          echo "Migration files found:"
-          ls -la migrations/ || echo "ERROR: migrations/ directory not found!"
-          for f in $(find migrations -name '*_up.sql' | sort); do
+          set -euo pipefail
+          count=0
+          for f in migrations/*_up.sql; do
             echo "Applying $f"
             psql "$TEST_DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+            count=$((count + 1))
           done
-          echo "Migrations complete."
+          echo "Applied $count migrations."
+          psql "$TEST_DATABASE_URL" -c "\dt"
 
       - name: Run tests
         env:
