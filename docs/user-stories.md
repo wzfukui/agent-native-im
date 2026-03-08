@@ -1,6 +1,6 @@
 # Agent-Native IM Platform User Stories
 
-## Version 3.5 - Complete User Story Documentation
+## Version 4.0 - Agent Onboarding Ready
 
 This document contains comprehensive user stories covering all platform capabilities, organized by user type and feature area.
 
@@ -727,6 +727,92 @@ await ctx.mention(
 - Support ticket volume
 - Feature adoption rate
 - Platform growth rate
+
+---
+
+## 7. v4.0 Agent Onboarding Stories
+
+### 7.1 Transparent Key Lifecycle
+
+#### Story: Seamless Bootstrap-to-Permanent Key Upgrade
+**As a** bot developer
+**I want** the SDK to automatically handle key upgrades
+**So that** I don't need to manually manage credential lifecycle
+
+**Acceptance Criteria:**
+- [x] SDK accepts `key_file` parameter (default `.agent_im_key`)
+- [x] On `connection.approved` WS event, SDK extracts `api_key`
+- [x] SDK auto-updates API client headers and WS reconnect URL
+- [x] Permanent key is persisted to key_file
+- [x] On restart, SDK loads saved permanent key
+- [x] Developer never needs to see or manage bootstrap vs permanent keys
+
+### 7.2 Orphan Stream Recovery
+
+#### Story: Stale Stream Auto-Cleanup
+**As a** user viewing a conversation
+**I want** stale "processing..." indicators to disappear automatically
+**So that** crashed bot streams don't block the UI forever
+
+**Acceptance Criteria:**
+- [x] Frontend runs 15-second interval checking all active streams
+- [x] Streams older than 2 minutes with no updates are marked as timed out
+- [x] Timed-out streams display "timed out" instead of infinite spinner
+- [x] Cleanup interval stops when component unmounts (no memory leak)
+
+### 7.3 Group Subscription Filtering
+
+#### Story: Smart Message Filtering in Group Conversations
+**As a** bot in a group conversation
+**I want** to only receive messages I'm supposed to handle
+**So that** I don't waste resources processing irrelevant messages
+
+**Acceptance Criteria:**
+- [x] `entity.config` WS event populates subscription_config map
+- [x] `mention_only` mode: bot skips messages where it's not mentioned
+- [x] `subscribe_all` mode: bot receives all messages (default)
+- [x] `Message.is_mentioned(entity_id)` helper checks `mentioned_entity_ids`
+- [x] Bot-level filter is opt-out via `filter_by_subscription=False`
+
+### 7.4 File Download Capability
+
+#### Story: Downloading Attachments from Messages
+**As a** bot receiving file messages
+**I want** to download and process attachment content
+**So that** I can analyze documents, images, or data files
+
+**Acceptance Criteria:**
+- [x] `ctx.download_attachment(attachment, dest_dir)` saves file locally
+- [x] `ctx.get_attachment_content(attachment)` returns bytes in memory
+- [x] Relative `/files/` URLs are resolved against base_url automatically
+- [x] Downloads use existing auth headers
+
+### 7.5 LLM Integration Tutorial
+
+#### Story: From Echo Bot to AI Agent
+**As a** new bot developer
+**I want** a working LLM integration example in the quickstart
+**So that** I can build a real AI bot, not just an echo bot
+
+**Acceptance Criteria:**
+- [x] `examples/llm_quickstart.py` provides ~30-line OpenAI integration
+- [x] Bot quickstart Step 2 shows real LLM code with streaming
+- [x] Example uses `ctx.get_system_context()` for memory injection
+- [x] Ghost `@bot.on_health_check` API removed from documentation
+
+### 7.6 Email Login & Settings
+
+#### Story: Login with Username or Email
+**As a** user
+**I want** to log in with either my username or email
+**So that** I have a familiar, flexible authentication experience
+
+**Acceptance Criteria:**
+- [x] Login form accepts username or email in the same field
+- [x] Backend detects `@` in input → tries email lookup first, falls back to username
+- [x] Registration form includes optional email field
+- [x] Settings page includes email field for profile editing
+- [x] Email column has partial unique index (non-empty emails must be unique)
 
 ---
 
