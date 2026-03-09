@@ -37,8 +37,8 @@ func TestCreateBot(t *testing.T) {
 	if !strings.Contains(markdownDoc, bootstrapKey) {
 		t.Fatal("markdown_doc should contain the bootstrap key")
 	}
-	if !strings.Contains(markdownDoc, "Agent 接入指南") {
-		t.Fatal("markdown_doc should contain onboarding instructions")
+	if !strings.Contains(markdownDoc, "Agent 接入凭据") {
+		t.Fatal("markdown_doc should contain onboarding credentials")
 	}
 
 	// Entity should exist
