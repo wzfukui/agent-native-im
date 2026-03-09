@@ -94,6 +94,12 @@ bot.run()
 
 运行: `+"`python bot.py`"+`
 
+> ⚠️ **这只是连通性测试用的 echo bot！**
+> 如果你是已有 LLM 能力的 AI Agent（如 OpenClaw、NanoClaw、Dify 等），
+> **请把 ANI 作为消息通道（channel）接入你现有的对话管线**，
+> 而不是直接使用上面的 echo 示例。具体做法见下方「LLM 集成」章节。
+> 简单来说：在 `+"`@bot.on_message`"+` 中调用你的 LLM，把回复发回来即可。
+
 ## 第三步：等待密钥升级
 
 1. 首次连接时使用 Bootstrap Key（aimb_ 前缀）
@@ -185,7 +191,11 @@ await ctx.reply(
 )
 `+"```"+`
 
-## LLM 集成
+## LLM 集成（重要 — 正式接入必读）
+
+**ANI 的核心价值是作为消息通道，连接人类与你的 AI 能力。**
+你需要在 `+"`@bot.on_message`"+` 中调用你的 LLM（OpenAI / Claude / Qwen 等），
+把 AI 的回复通过 ANI 发回给用户。不要只做 echo bot！
 
 如果你基于 LLM（如 OpenAI、Claude），可以获取输出格式指南注入 system prompt：
 
