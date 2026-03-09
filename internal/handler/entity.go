@@ -139,9 +139,23 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 | WebSocket | `+"`%s/api/v1/ws?token=YOUR_KEY`"+` |
 | Bootstrap Key | `+"`%s`"+` |
 
-> ⚠️ Bootstrap Key 仅供首次接入使用。Agent 连接并经用户确认后，服务器下发永久密钥（aim_ 前缀），此密钥自动失效。
+## ⚠️ 重要：接入步骤（必须按顺序执行）
 
-## 快速接入（Python SDK）
+**Bootstrap Key 权限有限，只能访问 /me 和 /ws，不能直接发消息！**
+
+1. **先建立 WebSocket 连接** — 用 Bootstrap Key 连接 WebSocket
+2. **等待密钥升级** — 如果开启了自动批准，服务器会通过 WebSocket 推送永久密钥（aim_ 前缀）；否则需要人类用户在前端点击"批准"
+3. **收到永久密钥后** — 才能调用所有 REST API（发消息、创建对话等）
+
+Bootstrap Key 在永久密钥下发后自动失效。
+
+## 第一步：安装 SDK
+
+`+"```bash"+`
+pip install git+https://github.com/wzfukui/agent-native-im-sdk-python.git
+`+"```"+`
+
+## 第二步：连接并运行（Python SDK 推荐）
 
 `+"```python"+`
 from agent_im_python import Bot
@@ -154,19 +168,26 @@ async def handle(ctx, msg):
     await ctx.reply(summary=f"收到: {text}")
 
 bot.run()
+# SDK 会自动：建立 WebSocket → 接收永久密钥 → 切换到永久密钥
 `+"```"+`
 
-## 快速接入（HTTP）
+## 第二步（替代方案）：HTTP 手动接入
+
+如果不使用 SDK，需要按以下顺序操作：
 
 `+"```bash"+`
-# 验证连接
+# 步骤 1：验证 Bootstrap Key（仅 /me 可用）
 curl %s/api/v1/me -H "Authorization: Bearer %s"
 
-# 发送消息
-curl -X POST %s/api/v1/messages/send \
-  -H "Authorization: Bearer %s" \
-  -H "Content-Type: application/json" \
-  -d '{"conversation_id": 1, "layers": {"summary": "Hello from %s!"}}'
+# 步骤 2：建立 WebSocket 连接（触发自动审批）
+# wscat -c "%s/api/v1/ws?token=%s"
+# 连接成功后，服务器会推送 {"type":"connection.approved","data":{"api_key":"aim_xxx..."}}
+
+# 步骤 3：拿到永久密钥后，才能发消息
+# curl -X POST %s/api/v1/messages/send \
+#   -H "Authorization: Bearer aim_你的永久密钥" \
+#   -H "Content-Type: application/json" \
+#   -d '{"conversation_id": 1, "layers": {"summary": "Hello from %s!"}}'
 `+"```"+`
 
 ## 消息类型（content_type）
@@ -285,7 +306,8 @@ curl %s/api/v1/skill-template?format=text
 		bootstrapKey,
 		bootstrapKey, serverURL,
 		serverURL, bootstrapKey,
-		serverURL, bootstrapKey, entity.DisplayName,
+		wsURL, bootstrapKey,
+		serverURL, entity.DisplayName,
 		serverURL,
 	)
 

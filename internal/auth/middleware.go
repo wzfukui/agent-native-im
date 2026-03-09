@@ -114,7 +114,7 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 func RequireFullAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if IsBootstrap(c) {
-			fail(c, http.StatusForbidden, "bootstrap key cannot access this endpoint; awaiting connection approval")
+			fail(c, http.StatusForbidden, "bootstrap key cannot access this endpoint. Bootstrap keys can only access /me and /ws. To get a permanent key: 1) connect via WebSocket (GET /api/v1/ws?token=YOUR_BOOTSTRAP_KEY), 2) wait for auto-approve or manual approval, 3) receive permanent key (aim_ prefix) via WebSocket message. See /api/v1/onboarding-guide for details.")
 			c.Abort()
 			return
 		}
