@@ -51,6 +51,7 @@ func NewRouter(s *Server) *gin.Engine {
 		// Public
 		v1.GET("/ping", HandlePing)
 		v1.GET("/skill-template", HandleSkillTemplate)
+		v1.GET("/onboarding-guide", s.HandleOnboardingGuide)
 
 		// Auth endpoints with strict rate limiting
 		v1.POST("/auth/login", rateLimiters["login"].Middleware(), s.HandleLogin)

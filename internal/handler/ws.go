@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -90,11 +91,28 @@ func (s *Server) HandleWS(c *gin.Context) {
 	utils.SafeGo(fmt.Sprintf("ws-write-%d", entityID), client.WritePump)
 	utils.SafeGo(fmt.Sprintf("ws-read-%d", entityID), client.ReadPump)
 
-	// Auto-approve if configured and the agent connected with a bootstrap key
-	if isBootstrap && s.Config.AutoApproveAgents {
-		utils.SafeGo(fmt.Sprintf("auto-approve-%d", entityID), func() {
-			s.autoApproveEntity(entityID)
-		})
+	// Auto-approve if configured globally OR per-entity metadata
+	if isBootstrap {
+		shouldAutoApprove := s.Config.AutoApproveAgents
+		if !shouldAutoApprove {
+			// Check per-entity metadata for auto_approve flag
+			entity, err := s.Store.GetEntityByID(context.Background(), entityID)
+			if err == nil && len(entity.Metadata) > 0 {
+				var meta map[string]interface{}
+				if json.Unmarshal(entity.Metadata, &meta) == nil {
+					if v, ok := meta["auto_approve"]; ok {
+						if b, ok := v.(bool); ok && b {
+							shouldAutoApprove = true
+						}
+					}
+				}
+			}
+		}
+		if shouldAutoApprove {
+			utils.SafeGo(fmt.Sprintf("auto-approve-%d", entityID), func() {
+				s.autoApproveEntity(entityID)
+			})
+		}
 	}
 }
 
