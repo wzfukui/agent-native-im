@@ -1,8 +1,10 @@
 # Agent-Native IM Platform User Stories
 
-## Version 4.0 - Agent Onboarding Ready
+## Version 4.1 - UX Refinement & Agent Context
 
 This document contains comprehensive user stories covering all platform capabilities, organized by user type and feature area.
+
+> **Changelog:** v4.1 (2026-03-13) added Section 8 — invite flow, conversation persistence, bot thinking animation, DM archive, attachment display, immediate file upload, send status, agent context injection, agent attachment processing, voice message optimistic rendering.
 
 ---
 
@@ -813,6 +815,234 @@ await ctx.mention(
 - [x] Registration form includes optional email field
 - [x] Settings page includes email field for profile editing
 - [x] Email column has partial unique index (non-empty emails must be unique)
+
+---
+
+## 8. v4.1 UX & Agent Context Stories (2026-03-13)
+
+### 8.1 Invite Link Flow
+
+#### Story: Joining a Conversation via Invite Link
+**As a** user who received an invite link
+**I want to** click the link, see the conversation info, and join with one tap
+**So that** I can quickly start collaborating without manual setup
+
+**Acceptance Criteria:**
+- [x] `/join/:code` URL is detected on app load and routes to the Join page
+- [x] Join page displays conversation title, description, and participant count via `GET /api/v1/invites/:code`
+- [x] "Join" button calls `POST /api/v1/invites/:code/join` and adds user as participant
+- [x] After joining, user is navigated directly into the conversation (not the conversation list)
+- [x] Expired, invalid, or already-joined states are handled with clear error messages
+- [x] Unauthenticated users are redirected to login, then back to the invite page
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Valid invite link | Open `/join/abc123` while logged in | Shows conversation info + Join button |
+| 2 | Join successfully | Click Join button | Navigates to the conversation, conversation appears in sidebar |
+| 3 | Expired invite | Open `/join/expired_code` | Shows "invite expired" error |
+| 4 | Already joined | Open invite for a conversation user is already in | Shows "already a member" message |
+| 5 | Not logged in | Open `/join/abc123` while not authenticated | Redirects to login, then back to invite page |
+| 6 | Double-click prevention | Rapidly click Join twice | Only one API call made, no duplicate participant entries |
+
+### 8.2 Conversation Persistence Across Refresh
+
+#### Story: Preserving Active Conversation on Page Refresh
+**As a** user in the middle of a conversation
+**I want to** refresh the page and return to the same conversation
+**So that** I don't lose my place and have to navigate back manually
+
+**Acceptance Criteria:**
+- [x] Active conversation ID is persisted to URL hash (`#c=<id>`) on selection
+- [x] On page load, hash is parsed and active conversation is restored
+- [x] Hash is cleared when user navigates away from all conversations
+- [x] Browser back/forward does not create extra history entries (uses `replaceState`)
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Refresh preserves conversation | Open conversation → Refresh page | Same conversation is active after reload |
+| 2 | Hash updates on switch | Switch between conversations | URL hash changes to match active conversation |
+| 3 | No hash when no active conv | Close/deselect conversation | URL hash is cleared |
+| 4 | Invalid hash ignored | Set `#c=99999999` (non-existent) | App loads normally, shows conversation list |
+
+### 8.3 Bot Thinking Animation
+
+#### Story: Showing Bot "Thinking" Indicator While Waiting for Response
+**As a** user who just sent a message to a bot
+**I want to** see a visual indicator that the bot is processing my message
+**So that** I know the system is working and my message was received
+
+**Acceptance Criteria:**
+- [x] After sending a message to a bot (DM or @mention in group), a pulsing dot animation appears
+- [x] Animation shows the bot's avatar and name above the dots
+- [x] Animation disappears when: bot replies, bot starts streaming, bot sends typing indicator, or 60s timeout
+- [x] Animation does not appear for human-to-human messages
+- [x] Animation is hidden when streaming bubbles are active (no duplicate indicators)
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | DM thinking indicator | Send message in DM with bot | 3-dot pulsing animation appears below sent message |
+| 2 | Group @mention thinking | Send `@bot question` in group | Thinking animation appears for the mentioned bot |
+| 3 | Cleared on bot reply | Wait for bot response | Animation disappears when bot message arrives |
+| 4 | Cleared on stream start | Bot begins streaming response | Animation disappears, streaming bubble takes over |
+| 5 | 60s timeout | Bot doesn't respond within 60s | Animation auto-hides after timeout |
+| 6 | Conversation switch | Switch to another conversation while thinking | Animation is cleared for the previous conversation |
+
+### 8.4 Private Message Archive
+
+#### Story: Archiving Direct Messages
+**As a** user with many DM conversations
+**I want to** archive old DMs just like I can archive group conversations
+**So that** I can keep my conversation list clean and focused
+
+**Acceptance Criteria:**
+- [x] Archive option appears in the context menu for DM conversations (not just groups)
+- [x] Archived DMs behave the same as archived groups (hidden from main list, viewable in archive)
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Archive DM | Right-click DM → Archive | DM moves to archive section |
+| 2 | Unarchive DM | Open archived DMs → Unarchive | DM returns to main list |
+
+### 8.5 Text Message Attachments Display
+
+#### Story: Displaying File Attachments on Text Messages
+**As a** user viewing a conversation
+**I want to** see file attachments rendered inline with text messages
+**So that** I can view images and download files without extra clicks
+
+**Acceptance Criteria:**
+- [x] Text messages with image attachments show thumbnail grid below the text
+- [x] Clicking an image attachment opens the lightbox viewer
+- [x] Non-image file attachments show as download links with filename, type, and size
+- [x] Multiple attachments of mixed types are rendered correctly together
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Text + image attachment | Send text with an image file | Text appears above, image thumbnail below |
+| 2 | Text + document attachment | Send text with a .pdf file | Text appears above, download link below |
+| 3 | Multiple mixed attachments | Send text with 2 images + 1 doc | Image grid + doc download link shown |
+| 4 | Image lightbox | Click on attached image thumbnail | Fullscreen lightbox opens |
+
+### 8.6 Immediate File Upload on Selection
+
+#### Story: Uploading Files Immediately When Selected
+**As a** user composing a message with file attachments
+**I want to** have files upload as soon as I select them
+**So that** sending is instant when I finish typing my message
+
+**Acceptance Criteria:**
+- [x] Files begin uploading immediately upon selection (click, paste, or drag-and-drop)
+- [x] Upload progress shown per file (spinning indicator during upload, checkmark on success, error on failure)
+- [x] Send button is disabled while uploads are in progress (shows spinner)
+- [x] Failed uploads are indicated visually; user can remove and re-attach
+- [x] On send, pre-uploaded file URLs are included in the message — no additional upload wait
+- [x] Optimistic message includes file attachments immediately (visible to sender right away)
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Immediate upload on select | Click attach → Select file | Spinner shown immediately, file uploads in background |
+| 2 | Paste image uploads | Paste image from clipboard | Image appears in file badges with upload spinner |
+| 3 | Drag-drop uploads | Drop file onto chat area | File starts uploading, message sent with attachment |
+| 4 | Send blocked during upload | Select large file → Immediately click Send | Send button shows spinner, blocks until upload completes |
+| 5 | Upload failure handling | Select file when server is down | File badge shows error state, can be removed |
+| 6 | Optimistic render with attachments | Send text + uploaded file | Message appears immediately with file attachment visible |
+| 7 | Remove pending file | Click X on uploading file badge | Upload is cancelled/ignored, file removed from list |
+
+### 8.7 Send Status Visual Feedback
+
+#### Story: Subtle Send Status Indication
+**As a** user sending messages
+**I want to** see a subtle visual cue that my message is being sent
+**So that** I have confidence the system received it without visual clutter
+
+**Acceptance Criteria:**
+- [x] Messages in "sending" state render at 60% opacity
+- [x] Opacity transitions to 100% when the server confirms delivery
+- [x] No explicit "sending"/"sent" text labels — the opacity transition itself serves as confirmation
+- [x] "Queued" and "failed" states still show explicit status badges
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Sending opacity | Send a message | Message briefly appears at 60% opacity |
+| 2 | Sent transition | Message confirmed by server | Opacity smoothly transitions to 100% |
+| 3 | Failed badge | Send when offline → goes to failed | Red "failed" badge shown |
+
+### 8.8 Agent Conversation Context Injection (OpenClaw Plugin)
+
+#### Story: Providing Full Conversation Context to AI Agent
+**As a** bot developer using OpenClaw to power my ANI bot
+**I want to** have the bot automatically receive conversation metadata (title, instructions, participants, memories)
+**So that** the bot understands its role, the conversation purpose, and can give contextually relevant answers
+
+**Acceptance Criteria:**
+- [x] Bot's system prompt includes its own identity (`You are <bot_name>`)
+- [x] Conversation instructions (prompt field) are injected as `## Instructions`
+- [x] Conversation description is included
+- [x] Participant list with roles and entity types is included
+- [x] Conversation memories (key-value pairs) are injected as `## Conversation Memory`
+- [x] Context is cached per conversation (5-minute TTL) to avoid excessive API calls
+- [x] Enriched WS format (`mention_with_context`) is properly unwrapped
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Bot knows its name | Ask bot "what is your name?" | Bot responds with its display name |
+| 2 | Bot follows instructions | Set conversation prompt to "Always respond in Japanese" | Bot replies in Japanese |
+| 3 | Bot knows participants | Ask bot "who is in this conversation?" | Bot lists participants by name and role |
+| 4 | Bot recalls memories | Add memory `project=Alpha` to conversation | Bot references "Alpha" when asked about the project |
+| 5 | Cache refresh | Change conversation title, wait 5+ minutes, ask bot | Bot uses updated title |
+| 6 | Group @mention with context | @mention bot in group with prior messages | Bot receives context messages and conversation metadata |
+
+### 8.9 Agent Attachment Processing (OpenClaw Plugin)
+
+#### Story: Bot Receiving and Reading File Attachments
+**As a** user sending a file to an AI bot
+**I want to** have the bot read and understand the file contents
+**So that** I can discuss documents, code, and other files with the bot
+
+**Acceptance Criteria:**
+- [ ] Text-based attachments (markdown, txt, json, csv, code files ≤100KB) are downloaded and inlined into the message body
+- [ ] Non-text attachments (images, PDFs, large files) are described with filename, type, and size
+- [ ] File download uses the bot's API key for authentication
+- [ ] Download failures are handled gracefully (fallback to description-only)
+- [ ] Both DM and group message attachments are processed
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Send markdown file | Send .md file to bot | Bot reads and discusses the file content |
+| 2 | Send code file | Send .py file to bot | Bot sees code and can review/discuss it |
+| 3 | Send large file | Send 200KB text file | Bot receives description only (exceeds 100KB limit) |
+| 4 | Send image | Send .png to bot | Bot receives `[Attachment: image.png (image/png, 45.2 KB)]` |
+| 5 | File download failure | Send file, but URL is inaccessible | Bot receives `[Attachment: file.txt — download failed]` |
+| 6 | Multiple attachments | Send text + 2 files | Bot receives text with both file contents/descriptions appended |
+
+### 8.10 Voice Message Optimistic Rendering
+
+#### Story: Instant Voice Message Display
+**As a** user recording a voice message
+**I want to** see it appear in the chat immediately after I stop recording
+**So that** the interaction feels responsive even while the file uploads
+
+**Acceptance Criteria:**
+- [x] Voice message appears in chat immediately with a temporary ID and "sending" opacity
+- [x] File upload and message send happen in the background
+- [x] On success, optimistic message is replaced with the server response
+- [x] On failure, message shows "failed" status with retry option
+
+**Test Cases:**
+| # | Test Case | Steps | Expected Result |
+|---|-----------|-------|-----------------|
+| 1 | Optimistic voice message | Record and send voice message | Audio bubble appears immediately at 60% opacity |
+| 2 | Upload completes | Wait for upload to finish | Opacity transitions to 100%, real message ID assigned |
+| 3 | Upload fails | Record voice when server is down | "Failed" badge shown on the voice message |
 
 ---
 
