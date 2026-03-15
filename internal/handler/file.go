@@ -55,6 +55,23 @@ func isAllowedMIME(filename string) bool {
 func (s *Server) HandleFileUpload(c *gin.Context) {
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadSize)
 
+	// Parse the entire multipart form first so both file and form fields are available
+	if err := c.Request.ParseMultipartForm(maxUploadSize); err != nil {
+		Fail(c, http.StatusBadRequest, "file is required (max 32MB)")
+		return
+	}
+
+	// Validate conversation_id early (before processing file)
+	var conversationID *int64
+	if cidStr := c.Request.FormValue("conversation_id"); cidStr != "" {
+		cid, err := strconv.ParseInt(cidStr, 10, 64)
+		if err != nil {
+			Fail(c, http.StatusBadRequest, "invalid conversation_id")
+			return
+		}
+		conversationID = &cid
+	}
+
 	file, header, err := c.Request.FormFile("file")
 	if err != nil {
 		Fail(c, http.StatusBadRequest, "file is required (max 32MB)")
@@ -87,17 +104,6 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 	// Extract stored filename from URL (last path segment)
 	storedName := filepath.Base(url)
 
-	// Parse optional conversation_id
-	var conversationID *int64
-	if cidStr := c.Request.FormValue("conversation_id"); cidStr != "" {
-		cid, err := strconv.ParseInt(cidStr, 10, 64)
-		if err != nil {
-			Fail(c, http.StatusBadRequest, "invalid conversation_id")
-			return
-		}
-		conversationID = &cid
-	}
-
 	// Create file record in database
 	entityID := auth.GetEntityID(c)
 	record := &model.FileRecord{
@@ -122,12 +128,13 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 
 // safeFilePath validates that the resolved path stays within baseDir to prevent path traversal.
 func safeFilePath(baseDir, filename string) (string, bool) {
-	if filename == "" {
+	// Reject empty, absolute paths, and traversal attempts
+	if filename == "" || filepath.IsAbs(filename) || strings.Contains(filename, "..") {
 		return "", false
 	}
 	base := filepath.Clean(baseDir)
 	joined := filepath.Clean(filepath.Join(base, filename))
-	// Ensure the resolved path is strictly within the base directory (not equal to it)
+	// Ensure the resolved path is strictly within the base directory
 	if !strings.HasPrefix(joined, base+string(os.PathSeparator)) {
 		return "", false
 	}
