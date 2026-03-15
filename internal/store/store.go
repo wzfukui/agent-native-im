@@ -23,7 +23,13 @@ type Store interface {
 	ChangeRequestStore
 	AuditStore
 	StatsStore
+	FileRecordStore
 	io.Closer
+}
+
+type FileRecordStore interface {
+	CreateFileRecord(ctx context.Context, record *model.FileRecord) error
+	GetFileRecordByStoredName(ctx context.Context, storedName string) (*model.FileRecord, error)
 }
 
 type StatsStore interface {

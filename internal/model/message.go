@@ -15,6 +15,7 @@ const (
 	ContentCode     ContentType = "code"
 	ContentImage    ContentType = "image"
 	ContentAudio    ContentType = "audio"
+	ContentVideo    ContentType = "video"
 	ContentFile     ContentType = "file"
 	ContentArtifact      ContentType = "artifact"
 	ContentSystem        ContentType = "system"

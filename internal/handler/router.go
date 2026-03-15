@@ -182,9 +182,11 @@ func NewRouter(s *Server) *gin.Engine {
 		// WebSocket (auth via query param, supports bootstrap keys)
 		v1.GET("/ws", s.HandleWS)
 
-		// Static file serving for uploads
+		// Authenticated file serving (replaces public static)
 		if s.FileStore != nil {
-			r.Static("/files", s.FileStore.ServePath())
+			fileGroup := r.Group("/files")
+			fileGroup.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
+			fileGroup.GET("/*filename", s.HandleFileDownload)
 		}
 	}
 

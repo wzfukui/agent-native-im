@@ -18,6 +18,10 @@ func extractBearer(c *gin.Context) string {
 	if strings.HasPrefix(h, "Bearer ") {
 		return h[7:]
 	}
+	// Fallback: support ?token= query param for browser contexts (e.g. <img src="/files/x?token=...">)
+	if t := c.Query("token"); t != "" {
+		return t
+	}
 	return ""
 }
 
