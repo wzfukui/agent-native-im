@@ -464,6 +464,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 
 	// Snapshot clients under lock, iterate without lock
 	clients := h.copyConvClients(msg.ConversationID)
+	log.Printf("ws: broadcast conv=%d sender=%d clients=%d mentions=%v", msg.ConversationID, msg.SenderID, len(clients), msg.Mentions)
 
 	for _, client := range clients {
 		// Always deliver to the sender
