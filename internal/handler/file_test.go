@@ -154,8 +154,9 @@ func TestFileUpload_InvalidConversationID(t *testing.T) {
 	assertStatus(t, w, http.StatusBadRequest)
 
 	result := parseResponse(t, w)
-	errMsg, _ := result["error"].(string)
-	if errMsg == "" {
+	// error is a structured ErrorDetail object, not a plain string
+	errObj, ok := result["error"].(map[string]interface{})
+	if !ok || errObj["message"] == nil {
 		t.Fatal("expected error message for invalid conversation_id")
 	}
 }
