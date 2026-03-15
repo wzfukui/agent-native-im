@@ -89,7 +89,7 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 
 	// Parse optional conversation_id
 	var conversationID *int64
-	if cidStr := c.PostForm("conversation_id"); cidStr != "" {
+	if cidStr := c.Request.FormValue("conversation_id"); cidStr != "" {
 		cid, err := strconv.ParseInt(cidStr, 10, 64)
 		if err != nil {
 			Fail(c, http.StatusBadRequest, "invalid conversation_id")
@@ -122,10 +122,13 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 
 // safeFilePath validates that the resolved path stays within baseDir to prevent path traversal.
 func safeFilePath(baseDir, filename string) (string, bool) {
+	if filename == "" {
+		return "", false
+	}
 	base := filepath.Clean(baseDir)
 	joined := filepath.Clean(filepath.Join(base, filename))
-	// Ensure the resolved path is strictly within the base directory
-	if !strings.HasPrefix(joined, base+string(os.PathSeparator)) && joined != base {
+	// Ensure the resolved path is strictly within the base directory (not equal to it)
+	if !strings.HasPrefix(joined, base+string(os.PathSeparator)) {
 		return "", false
 	}
 	return joined, true
