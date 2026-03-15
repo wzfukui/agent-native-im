@@ -768,6 +768,49 @@ func (h *Hub) BroadcastProgress(convID, senderID int64, streamID string, status 
 	}
 }
 
+// BroadcastTyping sends a typing indicator to all clients in a conversation
+// on behalf of the given entity. Called from the REST API handler.
+func (h *Hub) BroadcastTyping(convID, entityID int64, isProcessing bool, phase string) {
+	// Look up entity name
+	entityName := ""
+	ent, err := h.store.GetEntityByID(context.Background(), entityID)
+	if err == nil && ent != nil {
+		if ent.DisplayName != "" {
+			entityName = ent.DisplayName
+		} else {
+			entityName = ent.Name
+		}
+	}
+
+	payload := map[string]interface{}{
+		"conversation_id": convID,
+		"entity_id":       entityID,
+		"entity_name":     entityName,
+	}
+	if isProcessing {
+		payload["is_processing"] = true
+		if phase != "" {
+			payload["phase"] = phase
+		}
+	}
+	msg := WSMessage{Type: "typing", Data: payload}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	clients := h.copyConvClients(convID)
+	for _, c := range clients {
+		if c.entityID == entityID {
+			continue
+		}
+		select {
+		case c.send <- data:
+		default:
+		}
+	}
+}
+
 // handleTyping forwards typing indicators to other clients in the conversation.
 func (h *Hub) handleTyping(client *Client, rawData []byte) {
 	var envelope struct {

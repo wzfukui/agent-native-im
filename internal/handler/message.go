@@ -359,6 +359,40 @@ func (s *Server) HandleSendProgress(c *gin.Context) {
 	OK(c, http.StatusOK, gin.H{"sent": true})
 }
 
+// HandleSendTyping broadcasts a typing indicator via WebSocket.
+// The event is NOT persisted to the database — it is fire-and-forget.
+func (s *Server) HandleSendTyping(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req struct {
+		IsProcessing bool   `json:"is_processing,omitempty"`
+		Phase        string `json:"phase,omitempty"`
+	}
+	// Body is optional — a bare POST is valid (simple typing indicator)
+	_ = c.ShouldBindJSON(&req)
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	// Verify sender is a participant
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
+		return
+	}
+
+	// Broadcast typing event (no DB write)
+	if s.Hub != nil {
+		s.Hub.BroadcastTyping(convID, entityID, req.IsProcessing, req.Phase)
+	}
+
+	OK(c, http.StatusOK, gin.H{"sent": true})
+}
+
 func (s *Server) HandleListMessages(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
