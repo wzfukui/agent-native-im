@@ -2,6 +2,7 @@ package handler
 
 import (
 	"fmt"
+	"log"
 	"mime"
 	"net/http"
 	"os"
@@ -90,9 +91,11 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 	var conversationID *int64
 	if cidStr := c.PostForm("conversation_id"); cidStr != "" {
 		cid, err := strconv.ParseInt(cidStr, 10, 64)
-		if err == nil {
-			conversationID = &cid
+		if err != nil {
+			Fail(c, http.StatusBadRequest, "invalid conversation_id")
+			return
 		}
+		conversationID = &cid
 	}
 
 	// Create file record in database
@@ -106,9 +109,7 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 		ConversationID: conversationID,
 	}
 	if err := s.Store.CreateFileRecord(c.Request.Context(), record); err != nil {
-		// Log but don't fail the upload — the file is already saved
-		// Legacy behavior still works without the record
-		_ = err
+		log.Printf("WARN: failed to create file record for %s: %v", storedName, err)
 	}
 
 	OK(c, http.StatusCreated, gin.H{
@@ -117,6 +118,29 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 		"size":      header.Size,
 		"mime_type": mimeType,
 	})
+}
+
+// safeFilePath validates that the resolved path stays within baseDir to prevent path traversal.
+func safeFilePath(baseDir, filename string) (string, bool) {
+	base := filepath.Clean(baseDir)
+	joined := filepath.Clean(filepath.Join(base, filename))
+	// Ensure the resolved path is strictly within the base directory
+	if !strings.HasPrefix(joined, base+string(os.PathSeparator)) && joined != base {
+		return "", false
+	}
+	return joined, true
+}
+
+// sanitizeFilename strips control characters and quotes from a filename for use in headers.
+func sanitizeFilename(name string) string {
+	var b strings.Builder
+	for _, r := range name {
+		if r == '"' || r == '\\' || r < 32 {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	return b.String()
 }
 
 // HandleFileDownload serves files with authentication and access control.
@@ -130,6 +154,13 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 	// Clean the filename (remove leading slashes)
 	filename = strings.TrimPrefix(filename, "/")
 
+	// Prevent path traversal attacks
+	filePath, safe := safeFilePath(s.FileStore.ServePath(), filename)
+	if !safe {
+		Fail(c, http.StatusBadRequest, "invalid filename")
+		return
+	}
+
 	entityID := auth.GetEntityID(c)
 	ctx := c.Request.Context()
 
@@ -138,7 +169,6 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 	if err != nil {
 		// Fallback: if no record exists (legacy files uploaded before this feature),
 		// allow access if the user is authenticated (backward compatibility)
-		filePath := filepath.Join(s.FileStore.ServePath(), filename)
 		if _, statErr := os.Stat(filePath); statErr != nil {
 			Fail(c, http.StatusNotFound, "file not found")
 			return
@@ -156,13 +186,18 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 		}
 	}
 
-	// Serve the file
-	filePath := filepath.Join(s.FileStore.ServePath(), filename)
+	// Verify file exists on disk
+	if _, err := os.Stat(filePath); err != nil {
+		Fail(c, http.StatusNotFound, "file not found")
+		return
+	}
+
+	// Serve the file with proper headers
 	if record.MimeType != "" {
 		c.Header("Content-Type", record.MimeType)
 	}
 	if record.OriginalName != "" {
-		c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, record.OriginalName))
+		c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, sanitizeFilename(record.OriginalName)))
 	}
 	c.File(filePath)
 }

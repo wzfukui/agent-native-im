@@ -9,4 +9,4 @@ CREATE TABLE IF NOT EXISTS file_records (
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_file_records_conversation ON file_records(conversation_id);
-CREATE INDEX idx_file_records_stored_name ON file_records(stored_name);
+-- stored_name already has a UNIQUE constraint which creates an implicit index
