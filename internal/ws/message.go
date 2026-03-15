@@ -13,12 +13,13 @@ type WSMessage struct {
 //   ping          - keepalive
 //
 // Outbound types (server -> client):
-//   message.new    - new message delivered
-//   stream.start   - streaming started
-//   stream.delta   - streaming chunk
-//   stream.end     - streaming complete
-//   pong           - keepalive response
-//   error          - error notification
+//   message.new      - new message delivered
+//   message.progress - transient progress update (not persisted)
+//   stream.start     - streaming started
+//   stream.delta     - streaming chunk
+//   stream.end       - streaming complete
+//   pong             - keepalive response
+//   error            - error notification
 
 type SendPayload struct {
 	ConversationID int64               `json:"conversation_id"`

@@ -131,6 +131,9 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/conversations/:id/pin", s.HandlePinConversation)
 				full.POST("/conversations/:id/unpin", s.HandleUnpinConversation)
 
+				// Progress (transient, no DB write)
+				full.POST("/conversations/:id/progress", s.HandleSendProgress)
+
 				// Messages (with rate limiting)
 				full.POST("/messages/send", rateLimiters["message"].Middleware(), s.HandleSendMessage)
 				full.DELETE("/messages/:id", s.HandleRevokeMessage)

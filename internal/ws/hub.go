@@ -740,6 +740,34 @@ func (h *Hub) notifyParticipantWaitersWithList(participants []*model.Participant
 	}
 }
 
+// BroadcastProgress sends a transient progress event to all clients in a conversation.
+// Unlike BroadcastMessage, this is NOT persisted to the database.
+func (h *Hub) BroadcastProgress(convID, senderID int64, streamID string, status map[string]interface{}) {
+	msg := WSMessage{
+		Type: "message.progress",
+		Data: map[string]interface{}{
+			"conversation_id": convID,
+			"sender_id":       senderID,
+			"stream_id":       streamID,
+			"status":          status,
+		},
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	clients := h.copyConvClients(convID)
+
+	for _, client := range clients {
+		select {
+		case client.send <- data:
+		default:
+			log.Printf("ws: entity %d send buffer full (progress), dropping", client.entityID)
+		}
+	}
+}
+
 // handleTyping forwards typing indicators to other clients in the conversation.
 func (h *Hub) handleTyping(client *Client, rawData []byte) {
 	var envelope struct {

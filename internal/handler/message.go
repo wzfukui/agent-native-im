@@ -323,6 +323,42 @@ func (s *Server) HandleEditMessage(c *gin.Context) {
 	OK(c, http.StatusOK, msg)
 }
 
+// HandleSendProgress broadcasts a transient progress event via WebSocket.
+// The event is NOT persisted to the database — it is fire-and-forget.
+func (s *Server) HandleSendProgress(c *gin.Context) {
+	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		Fail(c, http.StatusBadRequest, "invalid conversation id")
+		return
+	}
+
+	var req struct {
+		StreamID string                 `json:"stream_id" binding:"required"`
+		Status   map[string]interface{} `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		Fail(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	// Verify sender is a participant
+	ok, err := s.Store.IsParticipant(ctx, convID, entityID)
+	if err != nil || !ok {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
+		return
+	}
+
+	// Broadcast progress event (no DB write)
+	if s.Hub != nil {
+		s.Hub.BroadcastProgress(convID, entityID, req.StreamID, req.Status)
+	}
+
+	OK(c, http.StatusOK, gin.H{"sent": true})
+}
+
 func (s *Server) HandleListMessages(c *gin.Context) {
 	convID, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
