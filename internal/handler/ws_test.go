@@ -399,17 +399,22 @@ func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
 	}
 }
 
-// skipEntityConfig reads and discards the initial entity.config message pushed on WS connect.
+// skipEntityConfig drains initial WS messages (presence, config) until entity.config is found or timeout.
 func skipEntityConfig(t *testing.T, conn *gorillaWs.Conn) {
 	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var msg map[string]interface{}
-	if err := conn.ReadJSON(&msg); err != nil {
-		t.Logf("skipEntityConfig: no entity.config received: %v", err)
-		return
-	}
-	if msg["type"] != "entity.config" {
-		t.Fatalf("skipEntityConfig: expected entity.config, got %v", msg["type"])
+	deadline := time.Now().Add(3 * time.Second)
+	conn.SetReadDeadline(deadline)
+	for {
+		var msg map[string]interface{}
+		if err := conn.ReadJSON(&msg); err != nil {
+			t.Logf("skipEntityConfig: no entity.config received before timeout: %v", err)
+			return
+		}
+		if msg["type"] == "entity.config" {
+			return // found it, done
+		}
+		// Skip other initial messages (entity.online, presence, etc.)
+		t.Logf("skipEntityConfig: skipping %v", msg["type"])
 	}
 }
 

@@ -203,12 +203,14 @@ func TestRefreshTokenRejectsBotEntity(t *testing.T) {
 	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "refresh-bot"})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
-	bootstrap, _ := data["bootstrap_key"].(string)
-	if bootstrap == "" {
-		t.Fatal("expected bootstrap key")
+	// New flow: creation returns api_key (aim_ prefix) directly
+	apiKey, _ := data["api_key"].(string)
+	if apiKey == "" {
+		t.Fatal("expected api_key")
 	}
 
-	resp = doJSON(t, "POST", "/api/v1/auth/refresh", &bootstrap, nil)
+	// Bot API keys should not be refreshable via JWT refresh endpoint
+	resp = doJSON(t, "POST", "/api/v1/auth/refresh", &apiKey, nil)
 	assertStatus(t, resp, http.StatusForbidden)
 }
 
