@@ -203,8 +203,10 @@ func corsMiddleware() gin.HandlerFunc {
 	// Security: Whitelist of allowed origins
 	allowedOrigins := map[string]bool{
 		"https://ani-web.51pwd.com": true,
+		"https://ani-rn.51pwd.com":  true, // React Native mobile preview
 		"http://localhost:3000":     true, // Development
 		"http://localhost:5173":     true, // Vite dev server
+		"http://localhost:19006":    true, // Expo web dev server
 		"http://192.168.44.43:3000": true, // Local network testing
 		"http://127.0.0.1:3000":     true, // Alternative localhost
 		"http://127.0.0.1:5173":     true, // Alternative Vite
