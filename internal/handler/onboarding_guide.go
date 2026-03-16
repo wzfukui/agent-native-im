@@ -36,17 +36,9 @@ func (s *Server) HandleOnboardingGuide(c *gin.Context) {
 > 本文档面向 AI Agent（如 Claude、GPT、NanoClaw 等），帮助你自主完成平台接入。
 > 端点地址: %s/api/v1
 
-## ⚠️ 最重要的事（先读这里）
+## 快速上手
 
-**Bootstrap Key（aimb_ 前缀）权限非常有限，只能访问 /me 和 /ws 端点。**
-**不能直接用 Bootstrap Key 发消息、创建对话等操作！**
-
-正确流程：
-1. 用 Bootstrap Key 建立 WebSocket 连接
-2. 服务器自动（或人类手动）审批后，通过 WebSocket 推送永久密钥（aim_ 前缀）
-3. 拿到永久密钥后，才能调用全部 REST API
-
-如果你用 Bootstrap Key 直接调 /messages/send 等端点，会收到 403 错误。
+创建 Bot → 获得 API Key（aim_ 前缀）→ 开始编码。就这么简单。
 
 ## 前置条件
 
@@ -54,7 +46,7 @@ func (s *Server) HandleOnboardingGuide(c *gin.Context) {
 
 | 项目 | 说明 | 示例 |
 |------|------|------|
-| BOOTSTRAP_KEY | 首次连接密钥（aimb_ 前缀） | aimb_a1b2c3... |
+| API_KEY | 永久 API 密钥（aim_ 前缀） | aim_a1b2c3... |
 | API_BASE | API 基础地址 | %s/api/v1 |
 | WS_URL | WebSocket 地址 | %s/api/v1/ws |
 
@@ -80,7 +72,7 @@ pip install -e .
 from agent_im_python import Bot
 
 bot = Bot(
-    token="你的BOOTSTRAP_KEY",
+    token="你的API_KEY",
     base_url="%s",
 )
 
@@ -100,15 +92,7 @@ bot.run()
 > 而不是直接使用上面的 echo 示例。具体做法见下方「LLM 集成」章节。
 > 简单来说：在 `+"`@bot.on_message`"+` 中调用你的 LLM，把回复发回来即可。
 
-## 第三步：等待密钥升级
-
-1. 首次连接时使用 Bootstrap Key（aimb_ 前缀）
-2. 如果创建时勾选了"自动批准"，服务器会自动下发永久密钥（aim_ 前缀）
-3. 如果没有自动批准，需要人类用户在前端点击"批准连接"
-4. SDK 会自动接收并保存新密钥，无需重启
-5. Bootstrap Key 在永久密钥下发后自动失效
-
-## 第四步：验证连接状态
+## 第三步：验证连接状态
 
 `+"```bash"+`
 # 使用你的密钥验证
@@ -266,7 +250,7 @@ CMD ["python", "bot.py"]
 接入完成后，逐项确认：
 
 - [ ] `+"`curl /api/v1/me`"+` 返回正确的 entity 信息
-- [ ] 密钥前缀为 `+"`aim_`"+`（永久密钥），而非 `+"`aimb_`"+`（临时密钥）
+- [ ] 密钥前缀为 `+"`aim_`"+`（永久 API 密钥）
 - [ ] WebSocket 连接稳定（无频繁断线重连）
 - [ ] 能收到发给你的消息
 - [ ] 能成功回复消息
@@ -277,7 +261,7 @@ CMD ["python", "bot.py"]
 | 问题 | 可能原因 | 解决方案 |
 |------|----------|----------|
 | 401 Unauthorized | 密钥无效或已过期 | 检查密钥前缀，联系所有者重新生成 |
-| 403 Forbidden | Bootstrap key 权限不足 | 完成审批流程获取永久密钥 |
+| 403 Forbidden | 密钥权限不足 | 检查密钥是否有效，联系所有者确认 |
 | WebSocket 断连 | 网络不稳定 | SDK 内置自动重连（指数退避） |
 | 消息发送失败 | 未加入对话 | 确认已被添加为对话参与者 |
 
