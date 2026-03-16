@@ -39,7 +39,7 @@ func generateKey(prefix string) string {
 }
 
 // HandleCreateEntity creates a bot/service entity owned by the authenticated user.
-// For bots/services, it generates a bootstrap key (aimb_ prefix) instead of a permanent key.
+// Issues a permanent API key (aim_ prefix) immediately — no bootstrap/approval flow needed.
 func (s *Server) HandleCreateEntity(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
 		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can create entities")
@@ -93,35 +93,9 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		return
 	}
 
-	// When AUTO_APPROVE_AGENTS is enabled, skip bootstrap and issue a permanent key directly.
-	// This avoids the bootstrap → WS connect → auto-approve → permanent key dance.
-	autoApprove := s.Config.AutoApproveAgents
-	if !autoApprove {
-		// Check per-entity metadata for auto_approve flag
-		if entity.Metadata != nil {
-			var meta map[string]interface{}
-			if json.Unmarshal(entity.Metadata, &meta) == nil {
-				if v, ok := meta["auto_approve"]; ok {
-					if b, ok := v.(bool); ok && b {
-						autoApprove = true
-					}
-				}
-			}
-		}
-	}
-
-	var returnedKey string
-	var credType model.CredType
-
-	if autoApprove {
-		// Issue permanent key directly
-		returnedKey = generateKey(keyPrefixPermanent)
-		credType = model.CredAPIKey
-	} else {
-		// Issue bootstrap key (requires WS connection + manual approval)
-		returnedKey = generateKey(keyPrefixBootstrap)
-		credType = model.CredBootstrap
-	}
+	// Always issue a permanent API key on creation (like Telegram/Discord/Slack).
+	returnedKey := generateKey(keyPrefixPermanent)
+	credType := model.CredAPIKey
 
 	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(returnedKey)))
 	cred := &model.Credential{
@@ -156,14 +130,9 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	}
 	wsURL := strings.Replace(strings.Replace(serverURL, "https://", "wss://", 1), "http://", "ws://", 1)
 
-	keyLabel := "Bootstrap Key"
-	keyNote := `- **Bootstrap Key 只能访问 /me 和 /ws，不能直接发消息！**
-- 必须先通过 WebSocket 连接，等待服务器下发永久密钥（aim_ 前缀）后才能调用全部 API`
-	if autoApprove {
-		keyLabel = "API Key"
-		keyNote = `- **此密钥为永久密钥（aim_ 前缀），可直接调用所有 API**
+	keyLabel := "API Key"
+	keyNote := `- **此密钥为永久密钥（aim_ 前缀），可直接调用所有 API**
 - 请妥善保管，创建后不再展示`
-	}
 
 	markdownDoc := fmt.Sprintf(`# Agent 接入凭据 — %s
 
@@ -220,17 +189,11 @@ bot.run()
 		returnedKey, serverURL,
 	)
 
-	resp := gin.H{
+	OK(c, http.StatusCreated, gin.H{
 		"entity":       entity,
+		"api_key":      returnedKey,
 		"markdown_doc": markdownDoc,
-	}
-	if autoApprove {
-		resp["api_key"] = returnedKey
-	} else {
-		resp["bootstrap_key"] = returnedKey
-	}
-
-	OK(c, http.StatusCreated, resp)
+	})
 }
 
 // HandleApproveConnection approves an Agent's connection request.

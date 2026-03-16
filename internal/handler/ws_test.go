@@ -119,13 +119,13 @@ func TestWebSocketStreamProtocol(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	// Create a bot and approve it to get a permanent key for the receiver
+	// Create a bot — gets permanent key directly
 	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "stream-receiver"})
 	assertStatus(t, resp, http.StatusCreated)
 	botData := parseOK(t, resp)
 	botEntity, _ := botData["entity"].(map[string]interface{})
 	botID := botEntity["id"].(float64)
-	bootstrapKey, _ := botData["bootstrap_key"].(string)
+	botKey, _ := botData["api_key"].(string)
 
 	// Create conversation with bot
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
@@ -154,8 +154,8 @@ func TestWebSocketStreamProtocol(t *testing.T) {
 	}
 	defer senderConn.Close()
 
-	// Receiver (bot) connects with bootstrap key
-	receiverURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], bootstrapKey)
+	// Receiver (bot) connects with permanent key
+	receiverURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], botKey)
 	receiverConn, _, err := gorillaWs.DefaultDialer.Dial(receiverURL, nil)
 	if err != nil {
 		t.Fatalf("ws dial receiver: %v", err)
@@ -244,24 +244,24 @@ func TestWebSocketStreamProtocol(t *testing.T) {
 	}
 }
 
-func TestWebSocketBootstrapKey(t *testing.T) {
+func TestWebSocketPermanentKey(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	// Create bot with bootstrap key
-	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "ws-boot-bot"})
+	// Create bot — gets permanent key
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "ws-perm-bot"})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
-	bootstrapKey, _ := data["bootstrap_key"].(string)
+	apiKey, _ := data["api_key"].(string)
 
 	ts := newWSTestServer(t)
 	defer ts.Close()
 
-	// Should be able to connect with bootstrap key
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], bootstrapKey)
+	// Should be able to connect with permanent key
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], apiKey)
 	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
-		t.Fatalf("ws dial with bootstrap key: %v", err)
+		t.Fatalf("ws dial with permanent key: %v", err)
 	}
 	conn.Close()
 }

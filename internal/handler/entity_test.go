@@ -6,7 +6,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	gorillaWs "github.com/gorilla/websocket"
 )
@@ -23,10 +22,10 @@ func TestCreateBot(t *testing.T) {
 
 	data := parseOK(t, resp)
 
-	// Should have bootstrap key with aimb_ prefix
-	bootstrapKey, _ := data["bootstrap_key"].(string)
-	if !strings.HasPrefix(bootstrapKey, "aimb_") {
-		t.Fatalf("expected bootstrap key with aimb_ prefix, got %q", bootstrapKey)
+	// Should have permanent API key with aim_ prefix (no bootstrap flow)
+	apiKey, _ := data["api_key"].(string)
+	if !strings.HasPrefix(apiKey, "aim_") {
+		t.Fatalf("expected API key with aim_ prefix, got %q", apiKey)
 	}
 
 	// Should have markdown doc
@@ -34,11 +33,14 @@ func TestCreateBot(t *testing.T) {
 	if markdownDoc == "" {
 		t.Fatal("expected non-empty markdown_doc")
 	}
-	if !strings.Contains(markdownDoc, bootstrapKey) {
-		t.Fatal("markdown_doc should contain the bootstrap key")
+	if !strings.Contains(markdownDoc, apiKey) {
+		t.Fatal("markdown_doc should contain the API key")
 	}
 	if !strings.Contains(markdownDoc, "Agent 接入凭据") {
 		t.Fatal("markdown_doc should contain onboarding credentials")
+	}
+	if strings.Contains(markdownDoc, "Bootstrap") {
+		t.Fatal("markdown_doc should not mention Bootstrap")
 	}
 
 	// Entity should exist
@@ -46,79 +48,74 @@ func TestCreateBot(t *testing.T) {
 	if entity["entity_type"] != "bot" {
 		t.Fatalf("expected entity_type=bot, got %v", entity["entity_type"])
 	}
+
+	// Permanent key should immediately have full API access
+	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(apiKey), nil)
+	assertStatus(t, resp, http.StatusOK)
 }
 
-func TestBootstrapKeyRestrictions(t *testing.T) {
+func TestCreatedKeyHasFullAccess(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	// Create bot and get bootstrap key
+	// Create bot — should get a permanent key with full access
 	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{
-		"name": "restricted-agent",
+		"name": "full-access-agent",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
-	bootstrapKey, _ := data["bootstrap_key"].(string)
+	apiKey, _ := data["api_key"].(string)
 
-	// Bootstrap key CAN access /me
-	resp = doJSON(t, "GET", "/api/v1/me", ptr(bootstrapKey), nil)
+	// Permanent key CAN access /me
+	resp = doJSON(t, "GET", "/api/v1/me", ptr(apiKey), nil)
 	assertStatus(t, resp, http.StatusOK)
 
-	// Bootstrap key CANNOT access /conversations
-	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(bootstrapKey), nil)
-	assertStatus(t, resp, http.StatusForbidden)
-
-	// Bootstrap key CANNOT send messages
-	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(bootstrapKey), map[string]interface{}{
-		"conversation_id": 1,
-		"layers":          map[string]string{"summary": "hello"},
-	})
-	assertStatus(t, resp, http.StatusForbidden)
+	// Permanent key CAN access /conversations
+	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(apiKey), nil)
+	assertStatus(t, resp, http.StatusOK)
 }
 
-func TestApproveConnection(t *testing.T) {
+func TestApproveConnectionBackwardCompat(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	// Create bot
+	// Create bot — now gets permanent key
 	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{
 		"name": "approve-agent",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
-	bootstrapKey, _ := data["bootstrap_key"].(string)
+	apiKey, _ := data["api_key"].(string)
 	entity, _ := data["entity"].(map[string]interface{})
 	entityID := entity["id"].(float64)
 
-	// Approve connection
+	// Approve endpoint still works (backward compat) — no bootstrap to delete, but still succeeds
 	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/approve", int(entityID)), ptr(token), nil)
 	assertStatus(t, resp, http.StatusOK)
 
-	// Bootstrap key should no longer work
-	resp = doJSON(t, "GET", "/api/v1/me", ptr(bootstrapKey), nil)
-	assertStatus(t, resp, http.StatusUnauthorized)
+	// Original permanent key should still work (it was never a bootstrap key)
+	resp = doJSON(t, "GET", "/api/v1/me", ptr(apiKey), nil)
+	assertStatus(t, resp, http.StatusOK)
 }
 
-func TestApproveConnectionWSPush(t *testing.T) {
+func TestWSConnectWithPermanentKey(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	// Create bot
+	// Create bot — gets permanent key directly
 	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{
-		"name": "ws-approve-agent",
+		"name": "ws-agent",
 	})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
-	bootstrapKey, _ := data["bootstrap_key"].(string)
-	entity, _ := data["entity"].(map[string]interface{})
-	entityID := int(entity["id"].(float64))
+	apiKey, _ := data["api_key"].(string)
 
 	// Start a test server for WebSocket
 	ts := newWSTestServer(t)
 	defer ts.Close()
 
-	// Connect WebSocket with bootstrap key
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], bootstrapKey)
+	// Connect WebSocket with permanent key — should work immediately
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], apiKey)
 	wsConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
@@ -128,29 +125,8 @@ func TestApproveConnectionWSPush(t *testing.T) {
 	// Drain entity.config
 	skipEntityConfig(t, wsConn)
 
-	// Approve connection via HTTP
-	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/entities/%d/approve", entityID), ptr(token), nil)
-	assertStatus(t, resp, http.StatusOK)
-
-	// Read WebSocket message — should receive connection.approved with permanent key
-	wsConn.SetReadDeadline(time.Now().Add(2 * time.Second))
-	var wsMsg map[string]interface{}
-	if err := wsConn.ReadJSON(&wsMsg); err != nil {
-		t.Fatalf("ws read: %v", err)
-	}
-
-	if wsMsg["type"] != "connection.approved" {
-		t.Fatalf("expected type=connection.approved, got %v", wsMsg["type"])
-	}
-
-	wsData, _ := wsMsg["data"].(map[string]interface{})
-	permanentKey, _ := wsData["api_key"].(string)
-	if !strings.HasPrefix(permanentKey, "aim_") {
-		t.Fatalf("expected permanent key with aim_ prefix, got %q", permanentKey)
-	}
-
 	// Permanent key should work for full auth
-	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(permanentKey), nil)
+	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(apiKey), nil)
 	assertStatus(t, resp, http.StatusOK)
 }
 

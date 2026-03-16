@@ -35,3 +35,4 @@ data/
 *.test
 *.out
 /server
+agent-im-server
