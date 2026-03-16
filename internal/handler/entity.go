@@ -93,15 +93,42 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		return
 	}
 
-	// Generate bootstrap key
-	bootstrapKey := generateKey(keyPrefixBootstrap)
-	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(bootstrapKey)))
+	// When AUTO_APPROVE_AGENTS is enabled, skip bootstrap and issue a permanent key directly.
+	// This avoids the bootstrap → WS connect → auto-approve → permanent key dance.
+	autoApprove := s.Config.AutoApproveAgents
+	if !autoApprove {
+		// Check per-entity metadata for auto_approve flag
+		if entity.Metadata != nil {
+			var meta map[string]interface{}
+			if json.Unmarshal(entity.Metadata, &meta) == nil {
+				if v, ok := meta["auto_approve"]; ok {
+					if b, ok := v.(bool); ok && b {
+						autoApprove = true
+					}
+				}
+			}
+		}
+	}
 
+	var returnedKey string
+	var credType model.CredType
+
+	if autoApprove {
+		// Issue permanent key directly
+		returnedKey = generateKey(keyPrefixPermanent)
+		credType = model.CredAPIKey
+	} else {
+		// Issue bootstrap key (requires WS connection + manual approval)
+		returnedKey = generateKey(keyPrefixBootstrap)
+		credType = model.CredBootstrap
+	}
+
+	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(returnedKey)))
 	cred := &model.Credential{
 		EntityID:   entity.ID,
-		CredType:   model.CredBootstrap,
+		CredType:   credType,
 		SecretHash: keyHash,
-		RawPrefix:  bootstrapKey[:8],
+		RawPrefix:  returnedKey[:8],
 	}
 
 	if err := s.Store.CreateCredential(c.Request.Context(), cred); err != nil {
@@ -129,6 +156,15 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	}
 	wsURL := strings.Replace(strings.Replace(serverURL, "https://", "wss://", 1), "http://", "ws://", 1)
 
+	keyLabel := "Bootstrap Key"
+	keyNote := `- **Bootstrap Key 只能访问 /me 和 /ws，不能直接发消息！**
+- 必须先通过 WebSocket 连接，等待服务器下发永久密钥（aim_ 前缀）后才能调用全部 API`
+	if autoApprove {
+		keyLabel = "API Key"
+		keyNote = `- **此密钥为永久密钥（aim_ 前缀），可直接调用所有 API**
+- 请妥善保管，创建后不再展示`
+	}
+
 	markdownDoc := fmt.Sprintf(`# Agent 接入凭据 — %s
 
 ## 连接凭据
@@ -137,13 +173,12 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 |------|---|
 | API Base | `+"`%s/api/v1`"+` |
 | WebSocket | `+"`%s/api/v1/ws`"+` |
-| Bootstrap Key | `+"`%s`"+` |
+| `+keyLabel+` | `+"`%s`"+` |
 | Entity ID | `+"`%d`"+` |
 
 ## ⚠️ 重要提醒
 
-- **Bootstrap Key 只能访问 /me 和 /ws，不能直接发消息！**
-- 必须先通过 WebSocket 连接，等待服务器下发永久密钥（aim_ 前缀）后才能调用全部 API
+`+keyNote+`
 - 详细接入流程、SDK 安装、消息格式、流式协议等，请阅读完整接入指南：
 
 **完整接入指南：** %s/api/v1/onboarding-guide
@@ -179,17 +214,23 @@ bot.run()
 `+"```"+`
 `,
 		entity.DisplayName,
-		serverURL, wsURL, bootstrapKey, entity.ID,
+		serverURL, wsURL, returnedKey, entity.ID,
 		serverURL, serverURL,
-		serverURL, bootstrapKey, wsURL, entity.ID,
-		bootstrapKey, serverURL,
+		serverURL, returnedKey, wsURL, entity.ID,
+		returnedKey, serverURL,
 	)
 
-	OK(c, http.StatusCreated, gin.H{
-		"entity":        entity,
-		"bootstrap_key": bootstrapKey,
-		"markdown_doc":  markdownDoc,
-	})
+	resp := gin.H{
+		"entity":       entity,
+		"markdown_doc": markdownDoc,
+	}
+	if autoApprove {
+		resp["api_key"] = returnedKey
+	} else {
+		resp["bootstrap_key"] = returnedKey
+	}
+
+	OK(c, http.StatusCreated, resp)
 }
 
 // HandleApproveConnection approves an Agent's connection request.
