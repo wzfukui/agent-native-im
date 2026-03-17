@@ -1,26 +1,13 @@
 package middleware
 
 import (
-	"encoding/json"
-	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
-type accessLogEntry struct {
-	Time      string `json:"time"`
-	Level     string `json:"level"`
-	Method    string `json:"method"`
-	Path      string `json:"path"`
-	Status    int    `json:"status"`
-	LatencyMs int64  `json:"latency_ms"`
-	EntityID  int64  `json:"entity_id,omitempty"`
-	ClientIP  string `json:"client_ip"`
-	RequestID string `json:"request_id,omitempty"`
-}
-
-// JSONLogger returns a GIN middleware that writes structured JSON access logs to stdout.
+// JSONLogger returns a GIN middleware that writes structured access logs via slog.
 func JSONLogger() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
@@ -36,28 +23,28 @@ func JSONLogger() gin.HandlerFunc {
 			}
 		}
 
-		entry := accessLogEntry{
-			Time:      start.UTC().Format(time.RFC3339),
-			Level:     "info",
-			Method:    c.Request.Method,
-			Path:      c.Request.URL.Path,
-			Status:    c.Writer.Status(),
-			LatencyMs: latency.Milliseconds(),
-			EntityID:  entityID,
-			ClientIP:  c.ClientIP(),
-			RequestID: GetRequestID(c),
+		attrs := []any{
+			"method", c.Request.Method,
+			"path", c.Request.URL.Path,
+			"status", c.Writer.Status(),
+			"latency_ms", latency.Milliseconds(),
+			"client_ip", c.ClientIP(),
+		}
+		if entityID > 0 {
+			attrs = append(attrs, "entity_id", entityID)
+		}
+		if rid := GetRequestID(c); rid != "" {
+			attrs = append(attrs, "request_id", rid)
 		}
 
-		if c.Writer.Status() >= 500 {
-			entry.Level = "error"
-		} else if c.Writer.Status() >= 400 {
-			entry.Level = "warn"
+		status := c.Writer.Status()
+		switch {
+		case status >= 500:
+			slog.Error("HTTP request", attrs...)
+		case status >= 400:
+			slog.Warn("HTTP request", attrs...)
+		default:
+			slog.Info("HTTP request", attrs...)
 		}
-
-		data, err := json.Marshal(entry)
-		if err != nil {
-			return
-		}
-		fmt.Println(string(data))
 	}
 }

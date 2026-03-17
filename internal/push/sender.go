@@ -3,7 +3,7 @@ package push
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"github.com/wzfukui/agent-native-im/internal/config"
@@ -55,16 +55,16 @@ func (s *Sender) SendToEntity(ctx context.Context, entityID int64, payload Paylo
 			Subscriber:      s.config.VAPIDSubject,
 		})
 		if err != nil {
-			log.Printf("push: failed to send to entity %d endpoint %s: %v", entityID, sub.Endpoint[:30], err)
+			slog.Error("push: failed to send", "entity_id", entityID, "endpoint", sub.Endpoint[:30], "error", err)
 			continue
 		}
 		resp.Body.Close()
-		log.Printf("push: sent to entity %d, status=%d endpoint=%s", entityID, resp.StatusCode, sub.Endpoint[:40])
+		slog.Info("push: sent", "entity_id", entityID, "status", resp.StatusCode, "endpoint", sub.Endpoint[:40])
 
 		// 410 Gone = subscription expired, remove it
 		if resp.StatusCode == 410 {
 			_ = s.store.DeletePushSubscription(ctx, entityID, sub.Endpoint)
-			log.Printf("push: removed expired subscription for entity %d", entityID)
+			slog.Info("push: removed expired subscription", "entity_id", entityID)
 		}
 	}
 }

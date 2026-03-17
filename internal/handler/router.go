@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -231,7 +231,7 @@ func corsMiddleware() gin.HandlerFunc {
 			c.Header("Access-Control-Allow-Origin", "*")
 		} else {
 			// Rejected origin: no CORS headers
-			log.Printf("CORS rejected for origin: %s", origin)
+			slog.Warn("CORS rejected", "origin", origin)
 		}
 
 		if strings.ToUpper(c.Request.Method) == "OPTIONS" {

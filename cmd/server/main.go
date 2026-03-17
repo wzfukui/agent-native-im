@@ -2,7 +2,8 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
+	"os"
 	"time"
 
 	"github.com/wzfukui/agent-native-im/internal/config"
@@ -11,21 +12,26 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/push"
 	"github.com/wzfukui/agent-native-im/internal/store/postgres"
+	"github.com/wzfukui/agent-native-im/internal/utils"
 	"github.com/wzfukui/agent-native-im/internal/webhook"
 	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
 func main() {
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
+
 	cfg := config.Load()
 
 	st, err := postgres.New(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer st.Close()
 
 	if err := st.SeedAdmin(context.Background(), cfg.AdminUser, cfg.AdminPass); err != nil {
-		log.Fatalf("failed to seed admin: %v", err)
+		slog.Error("failed to seed admin", "error", err)
+		os.Exit(1)
 	}
 
 	wh := webhook.NewDeliverer(st)
@@ -54,21 +60,24 @@ func main() {
 				MessageID:      msg.ID,
 			})
 		}
-		log.Println("push: Web Push notifications enabled")
+		slog.Info("push: Web Push notifications enabled")
 	}
 
 	go hub.Run()
 
 	fs, err := filestore.NewLocalStore("data/files", "/files")
 	if err != nil {
-		log.Fatalf("failed to init file store: %v", err)
+		slog.Error("failed to init file store", "error", err)
+		os.Exit(1)
 	}
 
-	// Start file cleanup goroutine
+	// Start file cleanup goroutine (1-min startup delay, then every 24h)
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
 	defer cleanupCancel()
 	maxAge := time.Duration(cfg.FileRetentionDays) * 24 * time.Hour
-	go filestore.CleanExpiredFiles(cleanupCtx, st, "data/files", 24*time.Hour, maxAge)
+	utils.SafeGo("file-cleanup", func() {
+		filestore.RunFileCleanup(cleanupCtx, st, "data/files", 24*time.Hour, maxAge, 1*time.Minute)
+	})
 
 	srv := &handler.Server{
 		Config:    cfg,
@@ -82,8 +91,9 @@ func main() {
 
 	r := handler.NewRouter(srv)
 
-	log.Printf("Agent-Native IM server starting on :%s", cfg.Port)
+	slog.Info("Agent-Native IM server starting", "port", cfg.Port)
 	if err := r.Run(":" + cfg.Port); err != nil {
-		log.Fatalf("server error: %v", err)
+		slog.Error("server error", "error", err)
+		os.Exit(1)
 	}
 }

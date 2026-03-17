@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -60,7 +60,7 @@ func FailFromDB(c *gin.Context, err error, fallbackMsg string) {
 		return
 	}
 	// Log full error server-side, return generic message to client
-	fmt.Printf("DB ERROR [%s %s]: %v\n", c.Request.Method, c.Request.URL.Path, err)
+	slog.Error("DB error", "method", c.Request.Method, "path", c.Request.URL.Path, "error", err)
 	FailWithCode(c, 500, ErrCodeDBError, fallbackMsg)
 }
 

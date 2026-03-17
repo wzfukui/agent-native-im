@@ -2,7 +2,7 @@ package ws
 
 import (
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -52,7 +52,7 @@ func (c *Client) ReadPump() {
 		_, data, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-				log.Printf("ws: entity %d read error: %v", c.entityID, err)
+				slog.Error("ws: read error", "entity_id", c.entityID, "error", err)
 			}
 			return
 		}
@@ -73,7 +73,7 @@ func (c *Client) ReadPump() {
 		case "status.update":
 			c.hub.handleStatusUpdate(c, data)
 		case "ping":
-			c.sendJSON(WSMessage{Type: "pong"})
+			c.SendJSON(WSMessage{Type: "pong"})
 		default:
 			c.sendError("unknown message type: " + msg.Type)
 		}
@@ -108,10 +108,11 @@ func (c *Client) WritePump() {
 	}
 }
 
-func (c *Client) sendJSON(v interface{}) {
+// SendJSON marshals the value and sends it to the client's send channel.
+func (c *Client) SendJSON(v interface{}) {
 	defer func() {
 		if r := recover(); r != nil {
-			log.Printf("ws: entity %d send recovered from panic (channel closed)", c.entityID)
+			slog.Warn("ws: send recovered from panic (channel closed)", "entity_id", c.entityID)
 		}
 	}()
 	data, err := json.Marshal(v)
@@ -121,10 +122,10 @@ func (c *Client) sendJSON(v interface{}) {
 	select {
 	case c.send <- data:
 	default:
-		log.Printf("ws: entity %d send buffer full, dropping message", c.entityID)
+		slog.Warn("ws: send buffer full, dropping message", "entity_id", c.entityID)
 	}
 }
 
 func (c *Client) sendError(msg string) {
-	c.sendJSON(WSMessage{Type: "error", Data: msg})
+	c.SendJSON(WSMessage{Type: "error", Data: msg})
 }

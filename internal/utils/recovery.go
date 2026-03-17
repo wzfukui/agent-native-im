@@ -2,7 +2,7 @@ package utils
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"runtime/debug"
 )
 
@@ -12,7 +12,7 @@ func SafeGo(name string, fn func()) {
 		defer func() {
 			if r := recover(); r != nil {
 				stack := debug.Stack()
-				log.Printf("PANIC in goroutine [%s]: %v\nStack trace:\n%s", name, r, stack)
+				slog.Error("PANIC in goroutine", "name", name, "error", r, "stack", string(stack))
 			}
 		}()
 		fn()
@@ -28,8 +28,8 @@ func SafeGoWithRestart(name string, fn func(), maxRetries int) {
 				defer func() {
 					if r := recover(); r != nil {
 						stack := debug.Stack()
-						log.Printf("PANIC in goroutine [%s] (retry %d/%d): %v\nStack trace:\n%s",
-							name, retries+1, maxRetries, r, stack)
+						slog.Error("PANIC in goroutine",
+							"name", name, "retry", retries+1, "max_retries", maxRetries, "error", r, "stack", string(stack))
 						retries++
 					}
 				}()
@@ -39,7 +39,7 @@ func SafeGoWithRestart(name string, fn func(), maxRetries int) {
 			}()
 		}
 		if retries >= maxRetries {
-			log.Printf("Goroutine [%s] exceeded max retries (%d), not restarting", name, maxRetries)
+			slog.Error("goroutine exceeded max retries, not restarting", "name", name, "max_retries", maxRetries)
 		}
 	}()
 }
@@ -49,6 +49,6 @@ func RecoverPanic(context string) {
 	if r := recover(); r != nil {
 		stack := debug.Stack()
 		err := fmt.Errorf("panic in %s: %v", context, r)
-		log.Printf("PANIC RECOVERED [%s]: %v\nStack trace:\n%s", context, err, stack)
+		slog.Error("PANIC RECOVERED", "context", context, "error", err, "stack", string(stack))
 	}
 }

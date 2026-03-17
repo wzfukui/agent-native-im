@@ -5,8 +5,9 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -42,7 +43,7 @@ var upgrader = gorillaWs.Upgrader{
 			}
 		}
 
-		log.Printf("WebSocket connection rejected from origin: %s", origin)
+		slog.Warn("WebSocket connection rejected", "origin", origin)
 		return false
 	},
 }
@@ -80,8 +81,14 @@ func (s *Server) HandleWS(c *gin.Context) {
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
-		log.Printf("ws: upgrade error for entity %d: %v", entityID, err)
+		slog.Error("ws: upgrade error", "entity_id", entityID, "error", err)
 		return
+	}
+
+	// Parse since_id for message catch-up on reconnect
+	var sinceID int64
+	if sinceStr := c.Query("since_id"); sinceStr != "" {
+		sinceID, _ = strconv.ParseInt(sinceStr, 10, 64)
 	}
 
 	client := ws_pkg.NewClient(s.Hub, conn, entityID, deviceID, deviceInfo)
@@ -90,6 +97,13 @@ func (s *Server) HandleWS(c *gin.Context) {
 	// Start WebSocket pumps with panic recovery
 	utils.SafeGo(fmt.Sprintf("ws-write-%d", entityID), client.WritePump)
 	utils.SafeGo(fmt.Sprintf("ws-read-%d", entityID), client.ReadPump)
+
+	// Send catch-up messages if since_id was provided (reconnect scenario)
+	if sinceID > 0 {
+		utils.SafeGo(fmt.Sprintf("ws-catchup-%d", entityID), func() {
+			s.sendCatchUpMessages(client, entityID, sinceID)
+		})
+	}
 
 	// Auto-approve if configured globally OR per-entity metadata
 	if isBootstrap {
@@ -116,6 +130,47 @@ func (s *Server) HandleWS(c *gin.Context) {
 	}
 }
 
+// sendCatchUpMessages queries missed messages and sends them to the client as message.new events.
+func (s *Server) sendCatchUpMessages(client *ws_pkg.Client, entityID, sinceID int64) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	msgs, err := s.Store.GetUpdatesForEntity(ctx, entityID, sinceID)
+	if err != nil {
+		slog.Error("ws: catch-up query failed", "entity_id", entityID, "since_id", sinceID, "error", err)
+		return
+	}
+
+	if len(msgs) == 0 {
+		return
+	}
+
+	slog.Info("ws: sending catch-up messages", "count", len(msgs), "entity_id", entityID, "since_id", sinceID)
+
+	// Populate sender info for each message
+	senderCache := make(map[int64]*model.Entity)
+	for _, msg := range msgs {
+		if _, ok := senderCache[msg.SenderID]; !ok {
+			sender, err := s.Store.GetEntityByID(ctx, msg.SenderID)
+			if err == nil {
+				senderCache[msg.SenderID] = sender
+			}
+		}
+		if sender, ok := senderCache[msg.SenderID]; ok {
+			msg.SenderType = string(sender.EntityType)
+			msg.Sender = sender
+		}
+	}
+
+	// Send each message as a message.new event
+	for _, msg := range msgs {
+		client.SendJSON(ws_pkg.WSMessage{
+			Type: "message.new",
+			Data: msg,
+		})
+	}
+}
+
 // autoApproveEntity generates a permanent key, deletes bootstrap creds, and pushes via WS.
 func (s *Server) autoApproveEntity(entityID int64) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -131,12 +186,12 @@ func (s *Server) autoApproveEntity(entityID int64) {
 	}
 
 	if err := s.Store.CreateCredential(ctx, cred); err != nil {
-		log.Printf("auto-approve: failed to create credential for entity %d: %v", entityID, err)
+		slog.Error("auto-approve: failed to create credential", "entity_id", entityID, "error", err)
 		return
 	}
 
 	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredBootstrap); err != nil {
-		log.Printf("auto-approve: failed to delete bootstrap keys for entity %d: %v", entityID, err)
+		slog.Error("auto-approve: failed to delete bootstrap keys", "entity_id", entityID, "error", err)
 		return
 	}
 
@@ -148,5 +203,5 @@ func (s *Server) autoApproveEntity(entityID int64) {
 		},
 	})
 
-	log.Printf("auto-approve: entity %d approved with permanent key", entityID)
+	slog.Info("auto-approve: entity approved with permanent key", "entity_id", entityID)
 }

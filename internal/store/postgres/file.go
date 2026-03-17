@@ -34,3 +34,11 @@ func (s *PGStore) DeleteFileRecord(ctx context.Context, id int64) error {
 	_, err := s.DB.NewDelete().Model((*model.FileRecord)(nil)).Where("id = ?", id).Exec(ctx)
 	return err
 }
+
+func (s *PGStore) ListAllStoredNames(ctx context.Context) ([]string, error) {
+	var names []string
+	err := s.DB.NewSelect().Model((*model.FileRecord)(nil)).
+		Column("stored_name").
+		Scan(ctx, &names)
+	return names, err
+}

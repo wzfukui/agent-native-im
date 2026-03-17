@@ -33,6 +33,7 @@ type FileRecordStore interface {
 	GetFileRecordByStoredName(ctx context.Context, storedName string) (*model.FileRecord, error)
 	ListExpiredFileRecords(ctx context.Context, olderThan time.Time, limit int) ([]*model.FileRecord, error)
 	DeleteFileRecord(ctx context.Context, id int64) error
+	ListAllStoredNames(ctx context.Context) ([]string, error)
 }
 
 type StatsStore interface {
@@ -104,7 +105,7 @@ type MessageStore interface {
 	ListMessages(ctx context.Context, conversationID int64, before int64, limit int) ([]*model.Message, error)
 	ListMessagesSince(ctx context.Context, conversationID int64, sinceID int64, limit int) ([]*model.Message, error)
 	SearchMessages(ctx context.Context, conversationID int64, query string, limit int) ([]*model.Message, error)
-	GlobalSearchMessages(ctx context.Context, entityID int64, query string, limit int) ([]*model.Message, error)
+	GlobalSearchMessages(ctx context.Context, entityID int64, query string, limit int, offset int) ([]*model.Message, error)
 	GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error)
 	RevokeMessage(ctx context.Context, messageID int64) error
 	UpdateMessage(ctx context.Context, msg *model.Message) error

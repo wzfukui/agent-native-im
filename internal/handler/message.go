@@ -3,8 +3,8 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"fmt"
-	"log"
+
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -51,7 +51,7 @@ func (s *Server) HandleSendMessage(c *gin.Context) {
 	for _, mentionID := range req.Mentions {
 		isMember, err := s.Store.IsParticipant(ctx, req.ConversationID, mentionID)
 		if err != nil || !isMember {
-			Fail(c, http.StatusBadRequest, fmt.Sprintf("mentioned entity %d is not a participant", mentionID))
+			Fail(c, http.StatusBadRequest, "mentioned entity is not a participant")
 			return
 		}
 	}
@@ -480,25 +480,46 @@ func (s *Server) HandleGlobalSearchMessages(c *gin.Context) {
 	ctx := c.Request.Context()
 
 	query := c.Query("q")
-	if query == "" {
-		Fail(c, http.StatusBadRequest, "query parameter 'q' is required")
+	if len(query) < 2 {
+		Fail(c, http.StatusBadRequest, "query must be at least 2 characters")
 		return
 	}
 
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit <= 0 {
 		limit = 20
-	} else if limit > 100 {
-		limit = 100
+	} else if limit > 50 {
+		limit = 50
 	}
 
-	msgs, err := s.Store.GlobalSearchMessages(ctx, entityID, query, limit)
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	if offset < 0 {
+		offset = 0
+	}
+
+	msgs, err := s.Store.GlobalSearchMessages(ctx, entityID, query, limit, offset)
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "search failed")
 		return
 	}
 	if msgs == nil {
 		msgs = []*model.Message{}
+	}
+
+	// Populate sender info
+	entityCache := make(map[int64]*model.Entity)
+	for _, msg := range msgs {
+		sender, ok := entityCache[msg.SenderID]
+		if !ok {
+			sender, err = s.Store.GetEntityByID(ctx, msg.SenderID)
+			if err == nil {
+				entityCache[msg.SenderID] = sender
+			}
+		}
+		if sender != nil {
+			msg.SenderType = string(sender.EntityType)
+			msg.Sender = sender
+		}
 	}
 
 	// Enrich results with conversation title
@@ -539,7 +560,7 @@ func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
 	}
 	if len(msg.Layers.Data) > 0 {
 		if err := json.Unmarshal(msg.Layers.Data, &data); err != nil {
-			log.Printf("handler: failed to parse task_handover data for msg %d: %v", msg.ID, err)
+			slog.Error("handler: failed to parse task_handover data", "message_id", msg.ID, "error", err)
 			return
 		}
 	}
@@ -548,11 +569,11 @@ func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
 	if data.TaskID != nil {
 		task, err := s.Store.GetTask(ctx, *data.TaskID)
 		if err != nil {
-			log.Printf("handler: task_handover lookup failed for task %d: %v", *data.TaskID, err)
+			slog.Error("handler: task_handover lookup failed", "task_id", *data.TaskID, "error", err)
 		} else if task != nil && task.ConversationID == msg.ConversationID {
 			task.Status = model.TaskHandedOver
 			if err := s.Store.UpdateTask(ctx, task); err != nil {
-				log.Printf("handler: failed to update task %d to handed_over: %v", *data.TaskID, err)
+				slog.Error("handler: failed to update task to handed_over", "task_id", *data.TaskID, "error", err)
 			}
 		}
 	}

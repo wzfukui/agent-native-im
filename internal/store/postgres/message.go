@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 
+	"github.com/uptrace/bun"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
 
@@ -46,8 +47,9 @@ func (s *PGStore) ListMessagesSince(ctx context.Context, conversationID int64, s
 	return msgs, err
 }
 
-func (s *PGStore) GlobalSearchMessages(ctx context.Context, entityID int64, query string, limit int) ([]*model.Message, error) {
+func (s *PGStore) GlobalSearchMessages(ctx context.Context, entityID int64, query string, limit int, offset int) ([]*model.Message, error) {
 	var msgs []*model.Message
+	pattern := "%" + query + "%"
 	err := s.DB.NewSelect().Model(&msgs).
 		Where("conversation_id IN (?)",
 			s.DB.NewSelect().Model((*model.Participant)(nil)).
@@ -56,9 +58,14 @@ func (s *PGStore) GlobalSearchMessages(ctx context.Context, entityID int64, quer
 				Where("left_at IS NULL"),
 		).
 		Where("revoked_at IS NULL").
-		Where("to_tsvector('simple', COALESCE(layers->>'summary', '')) @@ plainto_tsquery('simple', ?)", query).
+		WhereGroup(" AND ", func(q *bun.SelectQuery) *bun.SelectQuery {
+			return q.
+				Where("COALESCE(layers->>'summary', '') ILIKE ?", pattern).
+				WhereOr("COALESCE(layers->'data'->>'body', '') ILIKE ?", pattern)
+		}).
 		OrderExpr("id DESC").
 		Limit(limit).
+		Offset(offset).
 		Scan(ctx)
 	return msgs, err
 }
@@ -104,7 +111,7 @@ func (s *PGStore) GetUpdatesForEntity(ctx context.Context, entityID int64, after
 		Where("id > ?", afterID).
 		Where("revoked_at IS NULL").
 		OrderExpr("id ASC").
-		Limit(100).
+		Limit(200).
 		Scan(ctx)
 	return msgs, err
 }

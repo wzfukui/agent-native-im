@@ -4,7 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"golang.org/x/crypto/bcrypt"
 
@@ -45,6 +45,6 @@ func (s *PGStore) SeedAdmin(ctx context.Context, username, password string) erro
 		return fmt.Errorf("create credential: %w", err)
 	}
 
-	log.Printf("seed: admin user '%s' created (id=%d)", username, entity.ID)
+	slog.Info("seed: admin user created", "username", username, "id", entity.ID)
 	return nil
 }

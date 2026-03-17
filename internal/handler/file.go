@@ -2,7 +2,7 @@ package handler
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"mime"
 	"net/http"
 	"os"
@@ -115,7 +115,7 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 		ConversationID: conversationID,
 	}
 	if err := s.Store.CreateFileRecord(c.Request.Context(), record); err != nil {
-		log.Printf("WARN: failed to create file record for %s: %v", storedName, err)
+		slog.Warn("failed to create file record", "stored_name", storedName, "error", err)
 	}
 
 	OK(c, http.StatusCreated, gin.H{

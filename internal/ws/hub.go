@@ -3,7 +3,7 @@ package ws
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -54,7 +54,7 @@ func NewHub(st store.Store) *Hub {
 }
 
 func (h *Hub) Run() {
-	log.Println("ws: hub started")
+	slog.Info("ws: hub started")
 	for {
 		select {
 		case client := <-h.register:
@@ -65,7 +65,7 @@ func (h *Hub) Run() {
 			total := len(h.clients)
 			h.mu.Unlock()
 
-			log.Printf("ws: entity %d connected (total: %d)", client.entityID, total)
+			slog.Info("ws: entity connected", "entity_id", client.entityID, "total", total)
 
 			if !wasOnline {
 				h.broadcastPresence(client.entityID, true)
@@ -90,7 +90,7 @@ func (h *Hub) Run() {
 				total := len(h.clients)
 				h.mu.Unlock()
 
-				log.Printf("ws: entity %d disconnected (total: %d)", client.entityID, total)
+				slog.Info("ws: entity disconnected", "entity_id", client.entityID, "total", total)
 
 				if !stillOnline {
 					h.broadcastPresence(client.entityID, false)
@@ -250,7 +250,7 @@ func (h *Hub) broadcastPresence(entityID int64, online bool) {
 			select {
 			case client.send <- data:
 			default:
-				log.Printf("ws: entity %d send buffer full (presence), dropping", client.entityID)
+				slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "presence")
 			}
 			sent[client] = true
 		}
@@ -267,7 +267,7 @@ func (h *Hub) pushEntityConfig(client *Client) {
 	ctx := context.Background()
 	convIDs, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
 	if err != nil {
-		log.Printf("ws: failed to get conversations for entity config %d: %v", client.entityID, err)
+		slog.Error("ws: failed to get conversations for entity config", "entity_id", client.entityID, "error", err)
 		return
 	}
 
@@ -300,7 +300,7 @@ func (h *Hub) pushEntityConfig(client *Client) {
 		return
 	}
 
-	client.sendJSON(WSMessage{
+	client.SendJSON(WSMessage{
 		Type: "entity.config",
 		Data: map[string]interface{}{
 			"entity_id":     client.entityID,
@@ -314,7 +314,7 @@ func (h *Hub) subscribeClientLocked(client *Client) {
 	ctx := context.Background()
 	ids, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
 	if err != nil {
-		log.Printf("ws: failed to get conversations for entity %d: %v", client.entityID, err)
+		slog.Error("ws: failed to get conversations for entity", "entity_id", client.entityID, "error", err)
 		return
 	}
 
@@ -408,7 +408,7 @@ func (h *Hub) SendToEntity(entityID int64, msg WSMessage) {
 		select {
 		case client.send <- data:
 		default:
-			log.Printf("ws: entity %d send buffer full (direct), dropping", client.entityID)
+			slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "direct")
 		}
 	}
 }
@@ -454,7 +454,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 	ctx := context.Background()
 	participants, err := h.store.ListParticipants(ctx, msg.ConversationID)
 	if err != nil {
-		log.Printf("ws: failed to load participants for conversation %d: %v", msg.ConversationID, err)
+		slog.Error("ws: failed to load participants", "conversation_id", msg.ConversationID, "error", err)
 	}
 	subModes := make(map[int64]model.SubscriptionMode)
 	entityTypes := make(map[int64]model.EntityType)
@@ -478,7 +478,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			select {
 			case client.send <- data:
 			default:
-				log.Printf("ws: entity %d send buffer full (broadcast-sender), dropping", client.entityID)
+				slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "broadcast-sender")
 			}
 			continue
 		}
@@ -493,7 +493,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			select {
 			case client.send <- data:
 			default:
-				log.Printf("ws: entity %d send buffer full (broadcast-user), dropping", client.entityID)
+				slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "broadcast-user")
 			}
 			continue
 		}
@@ -548,7 +548,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			select {
 			case client.send <- deliveryData:
 			default:
-				log.Printf("ws: entity %d send buffer full (broadcast-bot), dropping", client.entityID)
+				slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "broadcast-bot")
 			}
 		}
 	}
@@ -570,15 +570,15 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			if p.Entity == nil || p.Entity.EntityType != model.EntityUser {
 				continue
 			}
-			log.Printf("push: triggering push for entity %d (conv=%d sender=%d)", p.EntityID, msg.ConversationID, msg.SenderID)
+			slog.Info("push: triggering push", "entity_id", p.EntityID, "conversation_id", msg.ConversationID, "sender_id", msg.SenderID)
 			go h.OnPush(p.EntityID, msg)
 			pushCount++
 		}
 		if pushCount == 0 {
-			log.Printf("push: no eligible recipients (conv=%d sender=%d participants=%d)", msg.ConversationID, msg.SenderID, len(participants))
+			slog.Info("push: no eligible recipients", "conversation_id", msg.ConversationID, "sender_id", msg.SenderID, "participants", len(participants))
 		}
 	} else {
-		log.Printf("push: OnPush is nil, push disabled")
+		slog.Info("push: OnPush is nil, push disabled")
 	}
 }
 
@@ -602,7 +602,7 @@ func (h *Hub) BroadcastStream(convID int64, streamType string, payload interface
 		select {
 		case client.send <- data:
 		default:
-			log.Printf("ws: entity %d send buffer full (stream), dropping", client.entityID)
+			slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "stream")
 		}
 	}
 }
@@ -625,10 +625,37 @@ func (h *Hub) BroadcastEvent(convID int64, eventType string, payload interface{}
 		select {
 		case client.send <- data:
 		default:
-			log.Printf("ws: entity %d send buffer full (event), dropping", client.entityID)
+			slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "event")
 		}
 	}
 }
+
+// BroadcastEventExcluding sends a non-stream event to all clients in a conversation
+// except those belonging to the excluded entity.
+func (h *Hub) BroadcastEventExcluding(convID int64, eventType string, payload interface{}, excludeEntityID int64) {
+	msg := WSMessage{
+		Type: eventType,
+		Data: payload,
+	}
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return
+	}
+
+	clients := h.copyConvClients(convID)
+
+	for _, client := range clients {
+		if client.entityID == excludeEntityID {
+			continue
+		}
+		select {
+		case client.send <- data:
+		default:
+			slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "event-excl")
+		}
+	}
+}
+
 
 func (h *Hub) handleSend(client *Client, rawData []byte) {
 	var envelope struct {
@@ -778,7 +805,7 @@ func (h *Hub) BroadcastProgress(convID, senderID int64, streamID string, status 
 		select {
 		case client.send <- data:
 		default:
-			log.Printf("ws: entity %d send buffer full (progress), dropping", client.entityID)
+			slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "progress")
 		}
 	}
 }
@@ -960,7 +987,7 @@ func (h *Hub) handleTaskCancel(client *Client, rawData []byte) {
 	})
 
 	// Confirm cancellation to the sender
-	client.sendJSON(WSMessage{
+	client.SendJSON(WSMessage{
 		Type: "task.cancelled",
 		Data: map[string]interface{}{
 			"conversation_id": payload.ConversationID,
@@ -968,6 +995,6 @@ func (h *Hub) handleTaskCancel(client *Client, rawData []byte) {
 		},
 	})
 
-	log.Printf("ws: stream %s in conversation %d cancelled by entity %d",
-		payload.StreamID, payload.ConversationID, client.entityID)
+	slog.Info("ws: stream cancelled", "stream_id",
+		payload.StreamID, "conversation_id", payload.ConversationID, "entity_id", client.entityID)
 }

@@ -7,7 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -703,7 +703,7 @@ func (s *Server) HandleDeleteEntity(c *gin.Context) {
 	if s.Hub != nil {
 		count := s.Hub.DisconnectEntity(entityID)
 		if count > 0 {
-			log.Printf("handler: disconnected %d websocket connections for disabled entity %d", count, entityID)
+			slog.Info("handler: disconnected websocket connections for disabled entity", "count", count, "entity_id", entityID)
 		}
 	}
 

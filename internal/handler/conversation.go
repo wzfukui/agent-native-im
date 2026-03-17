@@ -214,14 +214,14 @@ func (s *Server) HandleMarkAsRead(c *gin.Context) {
 		return
 	}
 
-	// Broadcast read receipt to conversation participants
+	// Broadcast read receipt to other participants (exclude the reader)
 	if s.Hub != nil {
-		s.Hub.BroadcastEvent(convID, "message.read", map[string]interface{}{
+		s.Hub.BroadcastEventExcluding(convID, "message.read", map[string]interface{}{
 			"conversation_id": convID,
 			"entity_id":       entityID,
 			"message_id":      req.MessageID,
-			"read_at":         time.Now().UTC().Format(time.RFC3339),
-		})
+			"last_read_at":    time.Now().UTC().Format(time.RFC3339),
+		}, entityID)
 	}
 
 	OK(c, http.StatusOK, gin.H{"conversation_id": convID, "last_read_message_id": req.MessageID})

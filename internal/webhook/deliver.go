@@ -8,7 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -39,7 +39,7 @@ func (d *Deliverer) DeliverAsync(msg *model.Message) {
 
 		webhooks, err := d.store.GetWebhooksForConversation(ctx, msg.ConversationID, "message.new")
 		if err != nil {
-			log.Printf("webhook: failed to get webhooks for conversation %d: %v", msg.ConversationID, err)
+			slog.Error("webhook: failed to get webhooks", "conversation_id", msg.ConversationID, "error", err)
 			return
 		}
 
@@ -56,7 +56,7 @@ func (d *Deliverer) DeliverAsync(msg *model.Message) {
 func (d *Deliverer) deliverToWebhook(wh *model.Webhook, msg *model.Message) {
 	body, err := json.Marshal(msg)
 	if err != nil {
-		log.Printf("webhook: failed to marshal message: %v", err)
+		slog.Error("webhook: failed to marshal message", "error", err)
 		return
 	}
 
@@ -71,13 +71,13 @@ func (d *Deliverer) deliverToWebhook(wh *model.Webhook, msg *model.Message) {
 
 		err = d.deliver(wh.URL, body, signature, wh.EntityID)
 		if err == nil {
-			log.Printf("webhook: delivered to entity %d (attempt %d)", wh.EntityID, attempt+1)
+			slog.Info("webhook: delivered", "entity_id", wh.EntityID, "attempt", attempt+1)
 			return
 		}
-		log.Printf("webhook: attempt %d failed for entity %d: %v", attempt+1, wh.EntityID, err)
+		slog.Error("webhook: delivery attempt failed", "attempt", attempt+1, "entity_id", wh.EntityID, "error", err)
 	}
 
-	log.Printf("webhook: all retries exhausted for entity %d", wh.EntityID)
+	slog.Error("webhook: all retries exhausted", "entity_id", wh.EntityID)
 }
 
 func (d *Deliverer) deliver(url string, body []byte, signature string, entityID int64) error {

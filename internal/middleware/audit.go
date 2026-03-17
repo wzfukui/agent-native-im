@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -26,8 +26,8 @@ func Audit(s ...store.Store) gin.HandlerFunc {
 		latency := time.Since(start).Milliseconds()
 		entityID := auth.GetEntityID(c)
 
-		log.Printf("AUDIT entity=%d method=%s path=%s status=%d latency=%dms",
-			entityID, c.Request.Method, c.Request.URL.Path, c.Writer.Status(), latency)
+		slog.Info("AUDIT",
+			"entity_id", entityID, "method", c.Request.Method, "path", c.Request.URL.Path, "status", c.Writer.Status(), "latency_ms", latency)
 
 		// Persist to database (best-effort, non-blocking)
 		if auditStore != nil {
