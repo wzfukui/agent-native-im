@@ -79,6 +79,18 @@ func (s *Server) HandleWS(c *gin.Context) {
 		isBootstrap = cred.CredType == model.CredBootstrap
 	}
 
+	// Reject disabled entities before upgrading the connection
+	entity, err := s.Store.GetEntityByID(c.Request.Context(), entityID)
+	if err != nil {
+		slog.Error("ws: failed to look up entity", "entity_id", entityID, "error", err)
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeEntityNotFound, "entity not found")
+		return
+	}
+	if entity.Status == "disabled" {
+		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "entity is disabled")
+		return
+	}
+
 	deviceID := c.Query("device_id")
 	if deviceID == "" {
 		deviceID = fmt.Sprintf("srv-%x", sha256.Sum256([]byte(fmt.Sprintf("%d-%d", entityID, time.Now().UnixNano()))))[:16]

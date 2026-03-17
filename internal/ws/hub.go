@@ -15,10 +15,17 @@ import (
 // entityID is the recipient, msg is the message being broadcast.
 type PushFunc func(entityID int64, msg *model.Message)
 
+// registration bundles a client with pre-fetched conversation IDs so that
+// the Hub.Run loop does not need to perform a DB query while holding the lock.
+type registration struct {
+	client  *Client
+	convIDs []int64
+}
+
 type Hub struct {
 	store      store.Store
 	clients    map[*Client]bool
-	register   chan *Client
+	register   chan registration
 	unregister chan *Client
 
 	// conversation -> set of clients
@@ -42,7 +49,7 @@ func NewHub(st store.Store) *Hub {
 	return &Hub{
 		store:           st,
 		clients:         make(map[*Client]bool),
-		register:        make(chan *Client),
+		register:        make(chan registration),
 		unregister:      make(chan *Client, 64),
 		convClients:     make(map[int64]map[*Client]bool),
 		waiters:         make(map[int64][]chan struct{}),
@@ -57,11 +64,12 @@ func (h *Hub) Run() {
 	slog.Info("ws: hub started")
 	for {
 		select {
-		case client := <-h.register:
+		case reg := <-h.register:
+			client := reg.client
 			h.mu.Lock()
 			wasOnline := h.isOnlineLocked(client.entityID)
 			h.clients[client] = true
-			h.subscribeClientLocked(client)
+			h.applySubscriptionsLocked(client, reg.convIDs)
 			total := len(h.clients)
 			h.mu.Unlock()
 
@@ -259,7 +267,16 @@ func (h *Hub) broadcastPresence(entityID int64, online bool) {
 }
 
 func (h *Hub) Register(client *Client) {
-	h.register <- client
+	// Pre-fetch conversation IDs outside the hub lock to avoid DB-under-lock stalls.
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	convIDs, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
+	if err != nil {
+		slog.Error("ws: failed to pre-fetch conversations for register", "entity_id", client.entityID, "error", err)
+		// Proceed with empty list; subscriptions can be added later.
+		convIDs = nil
+	}
+	h.register <- registration{client: client, convIDs: convIDs}
 }
 
 // pushEntityConfig sends the entity's subscription config for all conversations after connection.
@@ -310,16 +327,10 @@ func (h *Hub) pushEntityConfig(client *Client) {
 	})
 }
 
-// subscribeClientLocked subscribes a client to its conversations. Caller must hold h.mu write lock.
-func (h *Hub) subscribeClientLocked(client *Client) {
-	ctx := context.Background()
-	ids, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
-	if err != nil {
-		slog.Error("ws: failed to get conversations for entity", "entity_id", client.entityID, "error", err)
-		return
-	}
-
-	for _, id := range ids {
+// applySubscriptionsLocked subscribes a client to the given conversation IDs.
+// Caller must hold h.mu write lock. The convIDs should be pre-fetched outside the lock.
+func (h *Hub) applySubscriptionsLocked(client *Client, convIDs []int64) {
+	for _, id := range convIDs {
 		if h.convClients[id] == nil {
 			h.convClients[id] = make(map[*Client]bool)
 		}
