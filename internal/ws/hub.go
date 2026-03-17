@@ -561,6 +561,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 	// Push is sent regardless of online status because PWA in background
 	// may still have an active WebSocket but needs push to wake the user.
 	if h.OnPush != nil {
+		pushCount := 0
 		for _, p := range participants {
 			if p.EntityID == msg.SenderID {
 				continue
@@ -569,8 +570,15 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			if p.Entity == nil || p.Entity.EntityType != model.EntityUser {
 				continue
 			}
+			log.Printf("push: triggering push for entity %d (conv=%d sender=%d)", p.EntityID, msg.ConversationID, msg.SenderID)
 			go h.OnPush(p.EntityID, msg)
+			pushCount++
 		}
+		if pushCount == 0 {
+			log.Printf("push: no eligible recipients (conv=%d sender=%d participants=%d)", msg.ConversationID, msg.SenderID, len(participants))
+		}
+	} else {
+		log.Printf("push: OnPush is nil, push disabled")
 	}
 }
 
