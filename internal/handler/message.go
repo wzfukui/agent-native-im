@@ -411,6 +411,7 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 	}
 
 	before, _ := strconv.ParseInt(c.DefaultQuery("before", "0"), 10, 64)
+	sinceID, _ := strconv.ParseInt(c.DefaultQuery("since_id", "0"), 10, 64)
 	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
 	if limit <= 0 {
 		limit = 20
@@ -418,7 +419,13 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 		limit = 100
 	}
 
-	msgs, err := s.Store.ListMessages(ctx, convID, before, limit)
+	var msgs []*model.Message
+	if sinceID > 0 {
+		// Catch-up mode: return messages with id > since_id (newest first)
+		msgs, err = s.Store.ListMessagesSince(ctx, convID, sinceID, limit)
+	} else {
+		msgs, err = s.Store.ListMessages(ctx, convID, before, limit)
+	}
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to list messages")
 		return
@@ -464,6 +471,61 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 	OK(c, http.StatusOK, gin.H{
 		"messages": msgs,
 		"has_more": hasMore,
+	})
+}
+
+// HandleGlobalSearchMessages searches messages across all conversations the user participates in.
+func (s *Server) HandleGlobalSearchMessages(c *gin.Context) {
+	entityID := auth.GetEntityID(c)
+	ctx := c.Request.Context()
+
+	query := c.Query("q")
+	if query == "" {
+		Fail(c, http.StatusBadRequest, "query parameter 'q' is required")
+		return
+	}
+
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "20"))
+	if limit <= 0 {
+		limit = 20
+	} else if limit > 100 {
+		limit = 100
+	}
+
+	msgs, err := s.Store.GlobalSearchMessages(ctx, entityID, query, limit)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "search failed")
+		return
+	}
+	if msgs == nil {
+		msgs = []*model.Message{}
+	}
+
+	// Enrich results with conversation title
+	type searchResult struct {
+		*model.Message
+		ConversationTitle string `json:"conversation_title"`
+	}
+	results := make([]searchResult, 0, len(msgs))
+	convCache := make(map[int64]string)
+	for _, msg := range msgs {
+		title, ok := convCache[msg.ConversationID]
+		if !ok {
+			conv, err := s.Store.GetConversation(ctx, msg.ConversationID)
+			if err == nil && conv != nil {
+				title = conv.Title
+			}
+			convCache[msg.ConversationID] = title
+		}
+		results = append(results, searchResult{
+			Message:           msg,
+			ConversationTitle: title,
+		})
+	}
+
+	OK(c, http.StatusOK, gin.H{
+		"messages": results,
+		"query":    query,
 	})
 }
 

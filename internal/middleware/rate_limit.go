@@ -81,6 +81,16 @@ func (rl *RateLimiter) getVisitor(ip string) *visitor {
 	return v
 }
 
+// rateLimitKey returns the entity ID if authenticated, otherwise the client IP.
+func rateLimitKey(c *gin.Context) string {
+	if eid, exists := c.Get("entityID"); exists {
+		if id, ok := eid.(int64); ok && id > 0 {
+			return fmt.Sprintf("entity:%d", id)
+		}
+	}
+	return c.ClientIP()
+}
+
 // Middleware returns a Gin middleware handler for rate limiting
 func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -90,8 +100,8 @@ func (rl *RateLimiter) Middleware() gin.HandlerFunc {
 			return
 		}
 
-		ip := c.ClientIP()
-		v := rl.getVisitor(ip)
+		key := rateLimitKey(c)
+		v := rl.getVisitor(key)
 
 		rl.mu.Lock()
 		if v.tokens <= 0 {

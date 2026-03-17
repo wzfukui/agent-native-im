@@ -197,6 +197,13 @@ func (h *Hub) ConnectionCount() int {
 	return len(h.clients)
 }
 
+// ConversationCount returns the number of conversations with active WebSocket subscribers.
+func (h *Hub) ConversationCount() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.convClients)
+}
+
 // isOnlineLocked checks if an entity has active connections. Caller must hold h.mu (read or write).
 func (h *Hub) isOnlineLocked(entityID int64) bool {
 	for client := range h.clients {

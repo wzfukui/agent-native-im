@@ -214,6 +214,16 @@ func (s *Server) HandleMarkAsRead(c *gin.Context) {
 		return
 	}
 
+	// Broadcast read receipt to conversation participants
+	if s.Hub != nil {
+		s.Hub.BroadcastEvent(convID, "message.read", map[string]interface{}{
+			"conversation_id": convID,
+			"entity_id":       entityID,
+			"message_id":      req.MessageID,
+			"read_at":         time.Now().UTC().Format(time.RFC3339),
+		})
+	}
+
 	OK(c, http.StatusOK, gin.H{"conversation_id": convID, "last_read_message_id": req.MessageID})
 }
 

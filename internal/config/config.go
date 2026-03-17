@@ -14,6 +14,7 @@ type Config struct {
 	VAPIDPublicKey    string
 	VAPIDPrivateKey   string
 	VAPIDSubject      string
+	FileRetentionDays int
 }
 
 func Load() *Config {
@@ -41,6 +42,7 @@ func Load() *Config {
 		VAPIDPublicKey:    getEnv("VAPID_PUBLIC_KEY", ""),
 		VAPIDPrivateKey:   getEnv("VAPID_PRIVATE_KEY", ""),
 		VAPIDSubject:      getEnv("VAPID_SUBJECT", "mailto:admin@example.com"),
+		FileRetentionDays: getEnvInt("FILE_RETENTION_DAYS", 180),
 	}
 }
 

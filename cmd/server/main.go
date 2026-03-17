@@ -64,6 +64,12 @@ func main() {
 		log.Fatalf("failed to init file store: %v", err)
 	}
 
+	// Start file cleanup goroutine
+	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
+	defer cleanupCancel()
+	maxAge := time.Duration(cfg.FileRetentionDays) * 24 * time.Hour
+	go filestore.CleanExpiredFiles(cleanupCtx, st, "data/files", 24*time.Hour, maxAge)
+
 	srv := &handler.Server{
 		Config:    cfg,
 		Store:     st,

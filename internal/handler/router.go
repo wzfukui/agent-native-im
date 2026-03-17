@@ -40,6 +40,7 @@ type Server struct {
 func NewRouter(s *Server) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.RequestID())
+	r.Use(middleware.JSONLogger())
 	r.Use(securityHeaders())
 	r.Use(corsMiddleware())
 
@@ -50,6 +51,7 @@ func NewRouter(s *Server) *gin.Engine {
 	{
 		// Public
 		v1.GET("/ping", HandlePing)
+		v1.GET("/health", s.HandleHealthCheck)
 		v1.GET("/skill-template", HandleSkillTemplate)
 		v1.GET("/onboarding-guide", s.HandleOnboardingGuide)
 
@@ -145,6 +147,7 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/messages/:id/reactions", s.HandleToggleReaction)
 				full.GET("/conversations/:id/messages", s.HandleListMessages)
 				full.GET("/conversations/:id/search", s.HandleSearchMessages)
+				full.GET("/messages/search", s.HandleGlobalSearchMessages)
 
 				// Invite links
 				full.POST("/conversations/:id/invite", s.HandleCreateInviteLink)

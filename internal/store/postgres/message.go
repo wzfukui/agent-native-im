@@ -35,6 +35,34 @@ func (s *PGStore) ListMessages(ctx context.Context, conversationID int64, before
 	return msgs, err
 }
 
+func (s *PGStore) ListMessagesSince(ctx context.Context, conversationID int64, sinceID int64, limit int) ([]*model.Message, error) {
+	var msgs []*model.Message
+	err := s.DB.NewSelect().Model(&msgs).
+		Where("conversation_id = ?", conversationID).
+		Where("id > ?", sinceID).
+		OrderExpr("id DESC").
+		Limit(limit).
+		Scan(ctx)
+	return msgs, err
+}
+
+func (s *PGStore) GlobalSearchMessages(ctx context.Context, entityID int64, query string, limit int) ([]*model.Message, error) {
+	var msgs []*model.Message
+	err := s.DB.NewSelect().Model(&msgs).
+		Where("conversation_id IN (?)",
+			s.DB.NewSelect().Model((*model.Participant)(nil)).
+				Column("conversation_id").
+				Where("entity_id = ?", entityID).
+				Where("left_at IS NULL"),
+		).
+		Where("revoked_at IS NULL").
+		Where("to_tsvector('simple', COALESCE(layers->>'summary', '')) @@ plainto_tsquery('simple', ?)", query).
+		OrderExpr("id DESC").
+		Limit(limit).
+		Scan(ctx)
+	return msgs, err
+}
+
 func (s *PGStore) SearchMessages(ctx context.Context, conversationID int64, query string, limit int) ([]*model.Message, error) {
 	var msgs []*model.Message
 	err := s.DB.NewSelect().Model(&msgs).

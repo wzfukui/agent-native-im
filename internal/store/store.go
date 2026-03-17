@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"io"
+	"time"
 
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
@@ -30,6 +31,8 @@ type Store interface {
 type FileRecordStore interface {
 	CreateFileRecord(ctx context.Context, record *model.FileRecord) error
 	GetFileRecordByStoredName(ctx context.Context, storedName string) (*model.FileRecord, error)
+	ListExpiredFileRecords(ctx context.Context, olderThan time.Time, limit int) ([]*model.FileRecord, error)
+	DeleteFileRecord(ctx context.Context, id int64) error
 }
 
 type StatsStore interface {
@@ -99,7 +102,9 @@ type MessageStore interface {
 	CreateMessage(ctx context.Context, msg *model.Message) error
 	GetMessageByID(ctx context.Context, id int64) (*model.Message, error)
 	ListMessages(ctx context.Context, conversationID int64, before int64, limit int) ([]*model.Message, error)
+	ListMessagesSince(ctx context.Context, conversationID int64, sinceID int64, limit int) ([]*model.Message, error)
 	SearchMessages(ctx context.Context, conversationID int64, query string, limit int) ([]*model.Message, error)
+	GlobalSearchMessages(ctx context.Context, entityID int64, query string, limit int) ([]*model.Message, error)
 	GetUpdatesForEntity(ctx context.Context, entityID int64, afterID int64) ([]*model.Message, error)
 	RevokeMessage(ctx context.Context, messageID int64) error
 	UpdateMessage(ctx context.Context, msg *model.Message) error
