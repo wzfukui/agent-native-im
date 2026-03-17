@@ -59,6 +59,7 @@ func (s *Sender) SendToEntity(ctx context.Context, entityID int64, payload Paylo
 			continue
 		}
 		resp.Body.Close()
+		log.Printf("push: sent to entity %d, status=%d endpoint=%s", entityID, resp.StatusCode, sub.Endpoint[:40])
 
 		// 410 Gone = subscription expired, remove it
 		if resp.StatusCode == 410 {
