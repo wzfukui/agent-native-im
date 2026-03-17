@@ -15,6 +15,43 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
+// populateSenders batch-fetches sender entities for a slice of messages and
+// populates each message's Sender and SenderType fields.  This replaces
+// per-message GetEntityByID calls (N+1) with a single GetEntitiesByIDs query.
+func (s *Server) populateSenders(ctx context.Context, msgs []*model.Message) {
+	if len(msgs) == 0 {
+		return
+	}
+
+	// Collect unique sender IDs
+	seen := make(map[int64]struct{}, len(msgs))
+	ids := make([]int64, 0, len(msgs))
+	for _, msg := range msgs {
+		if _, ok := seen[msg.SenderID]; !ok {
+			seen[msg.SenderID] = struct{}{}
+			ids = append(ids, msg.SenderID)
+		}
+	}
+
+	entities, err := s.Store.GetEntitiesByIDs(ctx, ids)
+	if err != nil {
+		slog.Warn("populateSenders: batch fetch failed, falling back to empty", "error", err)
+		return
+	}
+
+	entityMap := make(map[int64]*model.Entity, len(entities))
+	for _, e := range entities {
+		entityMap[e.ID] = e
+	}
+
+	for _, msg := range msgs {
+		if sender, ok := entityMap[msg.SenderID]; ok {
+			msg.SenderType = string(sender.EntityType)
+			msg.Sender = sender
+		}
+	}
+}
+
 type sendMessageRequest struct {
 	ConversationID int64               `json:"conversation_id" binding:"required"`
 	ContentType    string              `json:"content_type,omitempty"`
@@ -431,21 +468,8 @@ func (s *Server) HandleListMessages(c *gin.Context) {
 		return
 	}
 
-	// Populate sender info for each message
-	entityCache := make(map[int64]*model.Entity)
-	for _, msg := range msgs {
-		sender, ok := entityCache[msg.SenderID]
-		if !ok {
-			sender, err = s.Store.GetEntityByID(ctx, msg.SenderID)
-			if err == nil {
-				entityCache[msg.SenderID] = sender
-			}
-		}
-		if sender != nil {
-			msg.SenderType = string(sender.EntityType)
-			msg.Sender = sender
-		}
-	}
+	// Populate sender info for each message (batch)
+	s.populateSenders(ctx, msgs)
 
 	// Populate reactions
 	if len(msgs) > 0 {
@@ -506,21 +530,8 @@ func (s *Server) HandleGlobalSearchMessages(c *gin.Context) {
 		msgs = []*model.Message{}
 	}
 
-	// Populate sender info
-	entityCache := make(map[int64]*model.Entity)
-	for _, msg := range msgs {
-		sender, ok := entityCache[msg.SenderID]
-		if !ok {
-			sender, err = s.Store.GetEntityByID(ctx, msg.SenderID)
-			if err == nil {
-				entityCache[msg.SenderID] = sender
-			}
-		}
-		if sender != nil {
-			msg.SenderType = string(sender.EntityType)
-			msg.Sender = sender
-		}
-	}
+	// Populate sender info (batch)
+	s.populateSenders(ctx, msgs)
 
 	// Enrich results with conversation title
 	type searchResult struct {

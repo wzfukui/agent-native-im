@@ -147,20 +147,8 @@ func (s *Server) sendCatchUpMessages(client *ws_pkg.Client, entityID, sinceID in
 
 	slog.Info("ws: sending catch-up messages", "count", len(msgs), "entity_id", entityID, "since_id", sinceID)
 
-	// Populate sender info for each message
-	senderCache := make(map[int64]*model.Entity)
-	for _, msg := range msgs {
-		if _, ok := senderCache[msg.SenderID]; !ok {
-			sender, err := s.Store.GetEntityByID(ctx, msg.SenderID)
-			if err == nil {
-				senderCache[msg.SenderID] = sender
-			}
-		}
-		if sender, ok := senderCache[msg.SenderID]; ok {
-			msg.SenderType = string(sender.EntityType)
-			msg.Sender = sender
-		}
-	}
+	// Populate sender info for each message (batch)
+	s.populateSenders(ctx, msgs)
 
 	// Send each message as a message.new event
 	for _, msg := range msgs {

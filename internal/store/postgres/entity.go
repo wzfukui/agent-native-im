@@ -23,6 +23,20 @@ func (s *PGStore) GetEntityByID(ctx context.Context, id int64) (*model.Entity, e
 	return entity, nil
 }
 
+func (s *PGStore) GetEntitiesByIDs(ctx context.Context, ids []int64) ([]*model.Entity, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var entities []*model.Entity
+	err := s.DB.NewSelect().Model(&entities).
+		Where("id IN (?)", bun.In(ids)).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return entities, nil
+}
+
 func (s *PGStore) GetEntityByName(ctx context.Context, name string, entityType model.EntityType) (*model.Entity, error) {
 	entity := new(model.Entity)
 	err := s.DB.NewSelect().Model(entity).

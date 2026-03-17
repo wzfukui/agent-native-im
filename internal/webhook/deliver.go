@@ -18,8 +18,9 @@ import (
 
 // Deliverer handles async webhook delivery with retry.
 type Deliverer struct {
-	store  store.Store
-	client *http.Client
+	store       store.Store
+	client      *http.Client
+	RetryDelays []time.Duration // configurable retry schedule; nil uses default
 }
 
 // NewDeliverer creates a webhook deliverer.
@@ -35,7 +36,8 @@ func NewDeliverer(st store.Store) *Deliverer {
 // DeliverAsync sends webhooks for a message to all relevant subscribers.
 func (d *Deliverer) DeliverAsync(msg *model.Message) {
 	go func() {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
 
 		webhooks, err := d.store.GetWebhooksForConversation(ctx, msg.ConversationID, "message.new")
 		if err != nil {
@@ -48,12 +50,12 @@ func (d *Deliverer) DeliverAsync(msg *model.Message) {
 			if wh.EntityID == msg.SenderID {
 				continue
 			}
-			d.deliverToWebhook(wh, msg)
+			d.deliverToWebhook(ctx, wh, msg)
 		}
 	}()
 }
 
-func (d *Deliverer) deliverToWebhook(wh *model.Webhook, msg *model.Message) {
+func (d *Deliverer) deliverToWebhook(ctx context.Context, wh *model.Webhook, msg *model.Message) {
 	body, err := json.Marshal(msg)
 	if err != nil {
 		slog.Error("webhook: failed to marshal message", "error", err)
@@ -62,14 +64,22 @@ func (d *Deliverer) deliverToWebhook(wh *model.Webhook, msg *model.Message) {
 
 	signature := sign(body, wh.Secret)
 
-	// Retry schedule: 0s, 5s, 25s
-	delays := []time.Duration{0, 5 * time.Second, 25 * time.Second}
+	// Retry schedule: 0s, 5s, 25s (overridable via RetryDelays for testing)
+	delays := d.RetryDelays
+	if delays == nil {
+		delays = []time.Duration{0, 5 * time.Second, 25 * time.Second}
+	}
 	for attempt, delay := range delays {
 		if delay > 0 {
-			time.Sleep(delay)
+			select {
+			case <-time.After(delay):
+			case <-ctx.Done():
+				slog.Error("webhook: context expired during retry wait", "entity_id", wh.EntityID, "error", ctx.Err())
+				return
+			}
 		}
 
-		err = d.deliver(wh.URL, body, signature, wh.EntityID)
+		err = d.deliver(ctx, wh.URL, body, signature, wh.EntityID)
 		if err == nil {
 			slog.Info("webhook: delivered", "entity_id", wh.EntityID, "attempt", attempt+1)
 			return
@@ -80,8 +90,8 @@ func (d *Deliverer) deliverToWebhook(wh *model.Webhook, msg *model.Message) {
 	slog.Error("webhook: all retries exhausted", "entity_id", wh.EntityID)
 }
 
-func (d *Deliverer) deliver(url string, body []byte, signature string, entityID int64) error {
-	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+func (d *Deliverer) deliver(ctx context.Context, url string, body []byte, signature string, entityID int64) error {
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create request: %w", err)
 	}

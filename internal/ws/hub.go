@@ -264,7 +264,8 @@ func (h *Hub) Register(client *Client) {
 
 // pushEntityConfig sends the entity's subscription config for all conversations after connection.
 func (h *Hub) pushEntityConfig(client *Client) {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	convIDs, err := h.store.GetConversationIDsByEntity(ctx, client.entityID)
 	if err != nil {
 		slog.Error("ws: failed to get conversations for entity config", "entity_id", client.entityID, "error", err)

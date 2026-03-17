@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/wzfukui/agent-native-im/internal/config"
@@ -73,7 +76,6 @@ func main() {
 
 	// Start file cleanup goroutine (1-min startup delay, then every 24h)
 	cleanupCtx, cleanupCancel := context.WithCancel(context.Background())
-	defer cleanupCancel()
 	maxAge := time.Duration(cfg.FileRetentionDays) * 24 * time.Hour
 	utils.SafeGo("file-cleanup", func() {
 		filestore.RunFileCleanup(cleanupCtx, st, "data/files", 24*time.Hour, maxAge, 1*time.Minute)
@@ -91,9 +93,38 @@ func main() {
 
 	r := handler.NewRouter(srv)
 
-	slog.Info("Agent-Native IM server starting", "port", cfg.Port)
-	if err := r.Run(":" + cfg.Port); err != nil {
-		slog.Error("server error", "error", err)
+	httpSrv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
+	}
+
+	// Start server in a goroutine
+	go func() {
+		slog.Info("Agent-Native IM server starting", "port", cfg.Port)
+		if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for SIGTERM or SIGINT
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGTERM, syscall.SIGINT)
+	sig := <-quit
+	slog.Info("shutting down gracefully...", "signal", sig.String())
+
+	// Give in-flight requests 15 seconds to complete
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer shutdownCancel()
+
+	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server forced to shutdown", "error", err)
 		os.Exit(1)
 	}
+
+	// Cancel file cleanup goroutine
+	cleanupCancel()
+
+	// Close database connection (deferred st.Close() will also run)
+	slog.Info("shutdown complete")
 }

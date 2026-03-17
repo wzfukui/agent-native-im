@@ -32,6 +32,9 @@ func Audit(s ...store.Store) gin.HandlerFunc {
 		// Persist to database (best-effort, non-blocking)
 		if auditStore != nil {
 			go func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+
 				details, _ := json.Marshal(map[string]interface{}{
 					"method":  c.Request.Method,
 					"path":    c.Request.URL.Path,
@@ -48,7 +51,9 @@ func Audit(s ...store.Store) gin.HandlerFunc {
 					Details:   details,
 					IPAddress: c.ClientIP(),
 				}
-				_ = auditStore.CreateAuditLog(context.Background(), entry)
+				if err := auditStore.CreateAuditLog(ctx, entry); err != nil {
+					slog.Error("audit: failed to persist audit log", "error", err)
+				}
 			}()
 		}
 	}
