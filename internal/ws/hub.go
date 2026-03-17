@@ -557,7 +557,9 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 	// Use the already-fetched participant list to avoid duplicate query
 	h.notifyParticipantWaitersWithList(participants, msg.SenderID)
 
-	// Send push notifications to offline human users
+	// Send push notifications to all human users except the sender.
+	// Push is sent regardless of online status because PWA in background
+	// may still have an active WebSocket but needs push to wake the user.
 	if h.OnPush != nil {
 		for _, p := range participants {
 			if p.EntityID == msg.SenderID {
@@ -567,9 +569,7 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			if p.Entity == nil || p.Entity.EntityType != model.EntityUser {
 				continue
 			}
-			if !h.IsOnline(p.EntityID) {
-				go h.OnPush(p.EntityID, msg)
-			}
+			go h.OnPush(p.EntityID, msg)
 		}
 	}
 }
