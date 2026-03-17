@@ -173,7 +173,7 @@ Soft-delete (disable) an owned entity. Disconnects all WebSocket sessions.
 
 ### POST /entities/:id/approve
 
-Approve an agent's bootstrap connection. Generates a permanent API key, revokes bootstrap key, and pushes new key via WebSocket.
+Approve a bot's bootstrap connection. Generates a permanent API key, revokes bootstrap key, and pushes new key via WebSocket.
 
 - **Auth**: Required (user only, must be owner)
 - **Response** `200`:
@@ -211,7 +211,7 @@ Get credential status for an owned entity.
 
 ### GET /entities/:id/self-check
 
-Readiness check for an agent entity.
+Readiness check for a bot entity.
 
 - **Auth**: Required (user only, must be owner)
 - **Response** `200`:

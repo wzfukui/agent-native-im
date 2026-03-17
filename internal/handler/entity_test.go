@@ -36,7 +36,7 @@ func TestCreateBot(t *testing.T) {
 	if !strings.Contains(markdownDoc, apiKey) {
 		t.Fatal("markdown_doc should contain the API key")
 	}
-	if !strings.Contains(markdownDoc, "Agent 接入凭据") {
+	if !strings.Contains(markdownDoc, "Bot 接入凭据") {
 		t.Fatal("markdown_doc should contain onboarding credentials")
 	}
 	if strings.Contains(markdownDoc, "Bootstrap") {

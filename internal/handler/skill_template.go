@@ -7,7 +7,7 @@ import (
 )
 
 // HandleSkillTemplate serves the skill template as a public endpoint.
-// Agents can GET /api/v1/skill-template to retrieve the output format guide.
+// Bots can GET /api/v1/skill-template to retrieve the output format guide.
 func HandleSkillTemplate(c *gin.Context) {
 	format := c.DefaultQuery("format", "json")
 	if format == "text" {
@@ -17,13 +17,13 @@ func HandleSkillTemplate(c *gin.Context) {
 	OK(c, http.StatusOK, gin.H{
 		"skill_template": SkillTemplate,
 		"version":        "v1",
-		"description":    "Agent output format capabilities for Agent-Native IM",
+		"description":    "Bot output format capabilities for Agent-Native IM",
 	})
 }
 
-// SkillTemplate is the system prompt fragment that tells an LLM agent
+// SkillTemplate is the system prompt fragment that tells an LLM bot
 // what message types and output formats are available in Agent-Native IM.
-// This should be injected into the agent's system prompt (or as a tool description).
+// This should be injected into the bot's system prompt (or as a tool description).
 const SkillTemplate = `## 输出格式能力（Agent-Native IM）
 
 你可以通过以下消息格式与用户交互。根据内容选择最合适的格式。

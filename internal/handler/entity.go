@@ -134,7 +134,7 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	keyNote := `- **此密钥为永久密钥（aim_ 前缀），可直接调用所有 API**
 - 请妥善保管，创建后不再展示`
 
-	markdownDoc := fmt.Sprintf(`# Agent 接入凭据 — %s
+	markdownDoc := fmt.Sprintf(`# Bot 接入凭据 — %s
 
 ## 连接凭据
 
@@ -196,7 +196,7 @@ bot.run()
 	})
 }
 
-// HandleApproveConnection approves an Agent's connection request.
+// HandleApproveConnection approves a Bot's connection request.
 // It generates a permanent API key, deletes the bootstrap key, and pushes the new key via WebSocket.
 func (s *Server) HandleApproveConnection(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
@@ -244,7 +244,7 @@ func (s *Server) HandleApproveConnection(c *gin.Context) {
 		return
 	}
 
-	// Push new key to the Agent via WebSocket
+	// Push new key to the Bot via WebSocket
 	if s.Hub != nil {
 		s.Hub.SendToEntity(entityID, ws.WSMessage{
 			Type: "connection.approved",
@@ -361,7 +361,7 @@ func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (
 	return permanentKey, keyHash, nil
 }
 
-// HandleEntitySelfCheck returns a lightweight readiness report for an agent.
+// HandleEntitySelfCheck returns a lightweight readiness report for a bot.
 func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
 	target, entityID, ok := s.ensureOwnedEntity(c)
 	if !ok {
@@ -381,13 +381,13 @@ func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
 	}
 	if len(apiKeyCreds) == 0 {
 		if len(bootstrapCreds) > 0 {
-			recommendations = append(recommendations, "agent is still using bootstrap key, complete approval to issue permanent key")
+			recommendations = append(recommendations, "bot is still using bootstrap key, complete approval to issue permanent key")
 		} else {
-			recommendations = append(recommendations, "no credentials found, recreate or re-approve this agent")
+			recommendations = append(recommendations, "no credentials found, recreate or re-approve this bot")
 		}
 	}
 	if !isOnline {
-		recommendations = append(recommendations, "agent is offline, verify network and websocket handshake")
+		recommendations = append(recommendations, "bot is offline, verify network and websocket handshake")
 	}
 
 	OK(c, http.StatusOK, gin.H{
