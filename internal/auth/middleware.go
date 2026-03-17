@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -14,12 +15,20 @@ import (
 )
 
 func extractBearer(c *gin.Context) string {
+	// 1. Authorization header (highest priority — API keys, SDK, programmatic access)
 	h := c.GetHeader("Authorization")
 	if strings.HasPrefix(h, "Bearer ") {
 		return h[7:]
 	}
-	// Fallback: support ?token= query param for browser contexts (e.g. <img src="/files/x?token=...">)
+
+	// 2. HttpOnly cookie (web browser sessions)
+	if cookie, err := c.Cookie("aim_token"); err == nil && cookie != "" {
+		return cookie
+	}
+
+	// 3. Query parameter (DEPRECATED — kept for backward compat, e.g. file downloads)
 	if t := c.Query("token"); t != "" {
+		slog.Warn("auth: token passed via query parameter (deprecated)", "path", c.Request.URL.Path)
 		return t
 	}
 	return ""
@@ -167,6 +176,30 @@ func RequireAdmin(st store.Store, adminUser string) gin.HandlerFunc {
 		}
 		c.Next()
 	}
+}
+
+// SetAuthCookie sets the aim_token HttpOnly cookie on the response.
+// In production (non-localhost), Secure is true (HTTPS only).
+// SameSite=Lax provides CSRF protection while allowing normal navigation.
+func SetAuthCookie(c *gin.Context, token string) {
+	secure := true
+	host := c.Request.Host
+	if strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1") {
+		secure = false
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("aim_token", token, 7*24*60*60, "/", "", secure, true)
+}
+
+// ClearAuthCookie removes the aim_token cookie from the response.
+func ClearAuthCookie(c *gin.Context) {
+	secure := true
+	host := c.Request.Host
+	if strings.Contains(host, "localhost") || strings.Contains(host, "127.0.0.1") {
+		secure = false
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("aim_token", "", -1, "/", "", secure, true)
 }
 
 // ResolveAPIKey looks up an entity by API key or bootstrap key (prefix + hash verification).

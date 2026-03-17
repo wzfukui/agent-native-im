@@ -81,6 +81,32 @@ func main() {
 		filestore.RunFileCleanup(cleanupCtx, st, "data/files", 24*time.Hour, maxAge, 1*time.Minute)
 	})
 
+	// Start periodic DB pool stats logging
+	poolCtx, poolCancel := context.WithCancel(context.Background())
+	sqldb := st.DB.DB
+	utils.SafeGo("db-pool-monitor", func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-poolCtx.Done():
+				return
+			case <-ticker.C:
+				stats := sqldb.Stats()
+				slog.Info("db pool stats",
+					"max_open", stats.MaxOpenConnections,
+					"open", stats.OpenConnections,
+					"in_use", stats.InUse,
+					"idle", stats.Idle,
+					"wait_count", stats.WaitCount,
+					"wait_duration_ms", stats.WaitDuration.Milliseconds(),
+					"max_idle_closed", stats.MaxIdleClosed,
+					"max_lifetime_closed", stats.MaxLifetimeClosed,
+				)
+			}
+		}
+	})
+
 	srv := &handler.Server{
 		Config:    cfg,
 		Store:     st,
@@ -122,8 +148,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Cancel file cleanup goroutine
+	// Cancel background goroutines
 	cleanupCancel()
+	poolCancel()
 
 	// Close database connection (deferred st.Close() will also run)
 	slog.Info("shutdown complete")

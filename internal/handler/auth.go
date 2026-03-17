@@ -109,6 +109,8 @@ func (s *Server) HandleLogin(c *gin.Context) {
 		return
 	}
 
+	auth.SetAuthCookie(c, token)
+
 	OK(c, http.StatusOK, gin.H{
 		"token":  token,
 		"entity": entity,
@@ -150,7 +152,15 @@ func (s *Server) HandleRefreshToken(c *gin.Context) {
 		return
 	}
 
+	auth.SetAuthCookie(c, token)
+
 	OK(c, http.StatusOK, gin.H{"token": token})
+}
+
+// HandleLogout clears the auth cookie and ends the session.
+func (s *Server) HandleLogout(c *gin.Context) {
+	auth.ClearAuthCookie(c)
+	OK(c, http.StatusOK, "logged out")
 }
 
 // HandleUpdateProfile updates the authenticated entity's display name and/or avatar.
@@ -408,6 +418,8 @@ func (s *Server) HandleRegister(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to generate token")
 		return
 	}
+
+	auth.SetAuthCookie(c, token)
 
 	OK(c, http.StatusCreated, gin.H{
 		"token":  token,

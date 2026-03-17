@@ -3,6 +3,7 @@ package postgres
 import (
 	"database/sql"
 	"fmt"
+	"time"
 
 	"github.com/uptrace/bun"
 	"github.com/uptrace/bun/dialect/pgdialect"
@@ -19,8 +20,10 @@ type PGStore struct {
 func New(databaseURL string) (*PGStore, error) {
 	sqldb := sql.OpenDB(pgdriver.NewConnector(pgdriver.WithDSN(databaseURL)))
 
-	sqldb.SetMaxOpenConns(10)
-	sqldb.SetMaxIdleConns(5)
+	sqldb.SetMaxOpenConns(25)
+	sqldb.SetMaxIdleConns(10)
+	sqldb.SetConnMaxLifetime(5 * time.Minute)
+	sqldb.SetConnMaxIdleTime(1 * time.Minute)
 
 	db := bun.NewDB(sqldb, pgdialect.New())
 
@@ -29,6 +32,11 @@ func New(databaseURL string) (*PGStore, error) {
 	}
 
 	return &PGStore{DB: db}, nil
+}
+
+// DBPoolStats returns the underlying sql.DB connection pool statistics.
+func (s *PGStore) DBPoolStats() sql.DBStats {
+	return s.DB.DB.Stats()
 }
 
 func (s *PGStore) Close() error {

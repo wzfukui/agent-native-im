@@ -51,7 +51,13 @@ var upgrader = gorillaWs.Upgrader{
 func (s *Server) HandleWS(c *gin.Context) {
 	token := c.Query("token")
 	if token == "" {
-		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required as query parameter")
+		// Fallback: read from cookie (browser WebSocket sends cookies automatically)
+		if cookie, err := c.Cookie("aim_token"); err == nil && cookie != "" {
+			token = cookie
+		}
+	}
+	if token == "" {
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required (via query parameter or cookie)")
 		return
 	}
 

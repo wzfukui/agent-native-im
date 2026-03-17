@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"io"
 	"time"
 
@@ -38,6 +39,7 @@ type FileRecordStore interface {
 
 type StatsStore interface {
 	GetSystemStats(ctx context.Context) (map[string]interface{}, error)
+	DBPoolStats() sql.DBStats
 }
 
 type PushStore interface {

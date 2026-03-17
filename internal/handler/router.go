@@ -70,6 +70,7 @@ func NewRouter(s *Server) *gin.Engine {
 			// Bootstrap-key-accessible endpoints
 			authed.GET("/me", s.HandleMe)
 			authed.POST("/auth/refresh", s.HandleRefreshToken)
+			authed.POST("/auth/logout", s.HandleLogout)
 
 			// Full-auth-only endpoints (bootstrap keys blocked)
 			full := authed.Group("")
