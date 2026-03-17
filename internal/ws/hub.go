@@ -999,3 +999,42 @@ func (h *Hub) handleTaskCancel(client *Client, rawData []byte) {
 	slog.Info("ws: stream cancelled", "stream_id",
 		payload.StreamID, "conversation_id", payload.ConversationID, "entity_id", client.entityID)
 }
+
+// handleStreamCancel processes a stream.cancel request from a client.
+// It broadcasts the cancel event to all OTHER clients in the conversation
+// so that bot/service WS clients (e.g. ANI plugin) can stop generation.
+func (h *Hub) handleStreamCancel(client *Client, rawData []byte) {
+	var envelope struct {
+		Type string `json:"type"`
+		Data struct {
+			ConversationID int64  `json:"conversation_id"`
+			StreamID       string `json:"stream_id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rawData, &envelope); err != nil {
+		client.sendError("invalid message format")
+		return
+	}
+
+	payload := envelope.Data
+	if payload.StreamID == "" {
+		client.sendError("stream_id is required")
+		return
+	}
+	if payload.ConversationID == 0 {
+		client.sendError("conversation_id is required")
+		return
+	}
+
+	slog.Info("ws: stream.cancel received",
+		"stream_id", payload.StreamID,
+		"conversation_id", payload.ConversationID,
+		"cancelled_by", client.entityID)
+
+	// Broadcast stream.cancel to all OTHER clients in the conversation (excluding sender)
+	h.BroadcastEventExcluding(payload.ConversationID, "stream.cancel", map[string]interface{}{
+		"conversation_id": payload.ConversationID,
+		"stream_id":       payload.StreamID,
+		"cancelled_by":    client.entityID,
+	}, client.entityID)
+}

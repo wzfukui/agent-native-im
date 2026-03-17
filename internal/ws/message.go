@@ -9,8 +9,12 @@ type WSMessage struct {
 }
 
 // Inbound types (client -> server):
-//   message.send  - send a message
-//   ping          - keepalive
+//   message.send   - send a message
+//   task.cancel    - cancel a task/stream (legacy)
+//   stream.cancel  - cancel an active stream (forwarded to other clients)
+//   typing         - typing indicator
+//   status.update  - entity status update
+//   ping           - keepalive
 //
 // Outbound types (server -> client):
 //   message.new      - new message delivered
@@ -18,6 +22,9 @@ type WSMessage struct {
 //   stream.start     - streaming started
 //   stream.delta     - streaming chunk
 //   stream.end       - streaming complete
+//   stream.cancel    - stream cancellation (forwarded from another client)
+//   task.cancel      - task cancellation broadcast
+//   task.cancelled   - cancellation confirmation to sender
 //   pong             - keepalive response
 //   error            - error notification
 
