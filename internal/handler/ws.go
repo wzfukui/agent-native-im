@@ -31,6 +31,7 @@ var upgrader = gorillaWs.Upgrader{
 			"http://localhost:19006",    // Expo web
 			"http://192.168.44.43:3000", // Local network testing
 			"http://192.168.44.43:8081", // Expo on server
+			"http://192.168.44.43:9800", // Native client via direct IP
 			"http://192.168.44.43:19006", // Expo web on server
 			"http://127.0.0.1:3000",     // Alternative localhost
 			"http://127.0.0.1:5173",     // Alternative Vite
