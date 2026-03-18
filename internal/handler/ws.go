@@ -24,9 +24,14 @@ var upgrader = gorillaWs.Upgrader{
 		origin := r.Header.Get("Origin")
 		allowedOrigins := []string{
 			"https://ani-web.51pwd.com",
+			"https://ani-rn.51pwd.com",  // RN web
 			"http://localhost:3000",     // Development
 			"http://localhost:5173",     // Vite dev server
+			"http://localhost:8081",     // Expo dev server
+			"http://localhost:19006",    // Expo web
 			"http://192.168.44.43:3000", // Local network testing
+			"http://192.168.44.43:8081", // Expo on server
+			"http://192.168.44.43:19006", // Expo web on server
 			"http://127.0.0.1:3000",     // Alternative localhost
 			"http://127.0.0.1:5173",     // Alternative Vite
 		}
