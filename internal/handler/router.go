@@ -195,6 +195,7 @@ func NewRouter(s *Server) *gin.Engine {
 		// Authenticated file serving (replaces public static)
 		if s.FileStore != nil {
 			r.GET("/avatars/*filename", s.HandleAvatarDownload)
+			r.GET("/avatar-files/*filename", s.HandleAvatarDownload)
 			fileGroup := r.Group("/files")
 			fileGroup.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
 			fileGroup.GET("/*filename", s.HandleFileDownload)
