@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/wzfukui/agent-native-im/internal/model"
@@ -41,4 +42,34 @@ func (s *PGStore) ListAllStoredNames(ctx context.Context) ([]string, error) {
 		Column("stored_name").
 		Scan(ctx, &names)
 	return names, err
+}
+
+func (s *PGStore) ListReferencedAvatarStoredNames(ctx context.Context) ([]string, error) {
+	var urls []string
+	if err := s.DB.NewSelect().
+		Model((*model.Entity)(nil)).
+		Column("avatar_url").
+		Where("avatar_url LIKE '/files/%'").
+		Scan(ctx, &urls); err != nil {
+		return nil, err
+	}
+
+	names := make([]string, 0, len(urls))
+	for _, url := range urls {
+		name := strings.TrimPrefix(strings.TrimSpace(url), "/files/")
+		if name != "" && name != url {
+			names = append(names, name)
+		}
+	}
+	return names, nil
+}
+
+func (s *PGStore) IsAvatarStoredNameReferenced(ctx context.Context, storedName string) (bool, error) {
+	if storedName == "" {
+		return false, nil
+	}
+	return s.DB.NewSelect().
+		Model((*model.Entity)(nil)).
+		Where("avatar_url = ?", "/files/"+storedName).
+		Exists(ctx)
 }

@@ -211,3 +211,43 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 	}
 	c.File(filePath)
 }
+
+// HandleAvatarDownload serves profile avatars through a stable, cacheable URL.
+// Avatars are still backed by the same files directory, but access is based on
+// whether the filename is referenced by an entity profile instead of generic
+// attachment auth rules.
+func (s *Server) HandleAvatarDownload(c *gin.Context) {
+	filename := c.Param("filename")
+	if filename == "" {
+		Fail(c, http.StatusBadRequest, "filename required")
+		return
+	}
+
+	filename = strings.TrimPrefix(filename, "/")
+	filePath, safe := safeFilePath(s.FileStore.ServePath(), filename)
+	if !safe {
+		Fail(c, http.StatusBadRequest, "invalid filename")
+		return
+	}
+
+	referenced, err := s.Store.IsAvatarStoredNameReferenced(c.Request.Context(), filename)
+	if err != nil {
+		Fail(c, http.StatusInternalServerError, "failed to resolve avatar")
+		return
+	}
+	if !referenced {
+		Fail(c, http.StatusNotFound, "avatar not found")
+		return
+	}
+
+	if _, err := os.Stat(filePath); err != nil {
+		Fail(c, http.StatusNotFound, "avatar file not found")
+		return
+	}
+
+	if contentType := mime.TypeByExtension(filepath.Ext(filename)); contentType != "" {
+		c.Header("Content-Type", contentType)
+	}
+	c.Header("Cache-Control", "public, max-age=604800, immutable")
+	c.File(filePath)
+}

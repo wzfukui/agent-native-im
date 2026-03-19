@@ -57,6 +57,16 @@ func cleanExpiredRecords(ctx context.Context, st store.Store, filesDir string, m
 	cutoff := time.Now().Add(-maxAge)
 	const batchSize = 100
 
+	avatarNames, err := st.ListReferencedAvatarStoredNames(ctx)
+	if err != nil {
+		slog.Error("file-cleanup: failed to list avatar references", "error", err)
+		return
+	}
+	avatarSet := make(map[string]struct{}, len(avatarNames))
+	for _, name := range avatarNames {
+		avatarSet[name] = struct{}{}
+	}
+
 	totalDeleted := 0
 	for {
 		records, err := st.ListExpiredFileRecords(ctx, cutoff, batchSize)
@@ -69,6 +79,14 @@ func cleanExpiredRecords(ctx context.Context, st store.Store, filesDir string, m
 		}
 
 		for _, rec := range records {
+			if _, keep := avatarSet[rec.StoredName]; keep {
+				slog.Info("file-cleanup: skipping avatar file referenced by entity profile",
+					"id", rec.ID,
+					"stored_name", rec.StoredName,
+				)
+				continue
+			}
+
 			diskPath := filepath.Join(filesDir, rec.StoredName)
 
 			slog.Info("file-cleanup: removing expired file",
@@ -114,9 +132,17 @@ func cleanOrphanedFiles(ctx context.Context, st store.Store, filesDir string) {
 		slog.Error("file-cleanup: failed to list stored names from DB", "error", err)
 		return
 	}
+	avatarNames, err := st.ListReferencedAvatarStoredNames(ctx)
+	if err != nil {
+		slog.Error("file-cleanup: failed to list avatar references", "error", err)
+		return
+	}
 
-	knownSet := make(map[string]struct{}, len(knownNames))
+	knownSet := make(map[string]struct{}, len(knownNames)+len(avatarNames))
 	for _, name := range knownNames {
+		knownSet[name] = struct{}{}
+	}
+	for _, name := range avatarNames {
 		knownSet[name] = struct{}{}
 	}
 

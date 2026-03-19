@@ -35,6 +35,8 @@ type FileRecordStore interface {
 	ListExpiredFileRecords(ctx context.Context, olderThan time.Time, limit int) ([]*model.FileRecord, error)
 	DeleteFileRecord(ctx context.Context, id int64) error
 	ListAllStoredNames(ctx context.Context) ([]string, error)
+	ListReferencedAvatarStoredNames(ctx context.Context) ([]string, error)
+	IsAvatarStoredNameReferenced(ctx context.Context, storedName string) (bool, error)
 }
 
 type StatsStore interface {
