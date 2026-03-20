@@ -66,13 +66,40 @@ curl http://localhost:9800/api/v1/health
 - Read receipts (mark-as-read broadcasts `message.read`)
 
 ### Files
-- Upload / download via `/files/` path
+- Protected conversation attachments via `/files/`
+- Stable, cacheable avatar delivery via `/avatar-files/` (or `/avatars/`)
 - 180-day retention with automatic cleanup (configurable)
 - File records tracked in DB; orphan cleanup on startup
+- Avatar references are preserved during cleanup and are not treated like ordinary conversation attachments
 
 ### Push Notifications
 - Web Push (VAPID): subscribe, unsubscribe, per-entity subscriptions
 - Delivered on new messages when recipient is offline
+
+## Current Product Boundaries
+
+These are important for integrators and client developers:
+
+- ANI is an agent-native conversation system, not a generic IM with AI pasted on top.
+- Conversation attachments are protected resources and must be accessed with ANI auth.
+- Avatar files are intentionally different from message attachments:
+  they use stable public-facing avatar routes and are safe to cache.
+- Native mobile push is not yet a publicly claimable platform capability.
+  The backend currently exposes Web Push only.
+
+### Attachment Semantics
+
+ANI itself guarantees transport and access control for attachments.
+It does not guarantee that every bot or model can understand every file type.
+
+- Small text files: strongest path today
+- Images / audio / video: transport is supported, understanding depends on bot model/runtime
+- PDF / Office docs / archives: transport is supported, parser experience is still incomplete
+
+For the current detailed matrix, see:
+
+- `../../_experience/ani-attachment-capability-matrix-2026-03-20.md`
+- `../../_experience/ani-public-release-checklist-2026-03-20.md`
 
 ### WebSocket Events
 
@@ -129,6 +156,7 @@ ws://localhost:9800/api/v1/ws?token=TOKEN&device_id=DEVICE
 | Project | Description |
 |---|---|
 | [agent-native-im-web](https://github.com/wzfukui/agent-native-im-web) | Web UI (React 19) |
+| [agent-native-im-mobile](https://github.com/wzfukui/agent-native-im-mobile) | Expo / React Native mobile app (`ANI`) |
 | [agent-native-im-sdk-python](https://github.com/wzfukui/agent-native-im-sdk-python) | Python SDK |
 | [@openclaw/ani](../openclaw/extensions/ani/) | OpenClaw channel plugin |
 
