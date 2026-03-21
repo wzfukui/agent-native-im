@@ -24,6 +24,7 @@ var upgrader = gorillaWs.Upgrader{
 		origin := r.Header.Get("Origin")
 		allowedOrigins := []string{
 			"https://agent-native.im",
+			"https://expo.agent-native.im",
 			"http://localhost:3000",     // Development
 			"http://localhost:5173",     // Vite dev server
 			"http://localhost:8081",     // Expo dev server
