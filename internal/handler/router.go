@@ -208,8 +208,7 @@ func NewRouter(s *Server) *gin.Engine {
 func corsMiddleware() gin.HandlerFunc {
 	// Security: Whitelist of allowed origins
 	allowedOrigins := map[string]bool{
-		"https://ani-web.51pwd.com": true,
-		"https://ani-rn.51pwd.com":  true, // React Native mobile preview
+		"https://agent-native.im":   true,
 		"http://localhost:3000":     true, // Development
 		"http://localhost:5173":     true, // Vite dev server
 		"http://localhost:19006":    true, // Expo web dev server
@@ -269,7 +268,7 @@ func securityHeaders() gin.HandlerFunc {
 			"img-src 'self' data: https:; " +
 			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + // unsafe-eval needed for React dev tools
 			"style-src 'self' 'unsafe-inline'; " +
-			"connect-src 'self' wss://ani-web.51pwd.com ws://localhost:* ws://127.0.0.1:* ws://192.168.44.43:*; " +
+			"connect-src 'self' wss://agent-native.im ws://localhost:* ws://127.0.0.1:* ws://192.168.44.43:*; " +
 			"font-src 'self' data:; " +
 			"object-src 'none'; " +
 			"frame-ancestors 'none'"

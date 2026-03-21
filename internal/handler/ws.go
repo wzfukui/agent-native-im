@@ -23,8 +23,7 @@ var upgrader = gorillaWs.Upgrader{
 		// Security: Whitelist allowed origins for WebSocket connections
 		origin := r.Header.Get("Origin")
 		allowedOrigins := []string{
-			"https://ani-web.51pwd.com",
-			"https://ani-rn.51pwd.com",  // RN web
+			"https://agent-native.im",
 			"http://localhost:3000",     // Development
 			"http://localhost:5173",     // Vite dev server
 			"http://localhost:8081",     // Expo dev server
