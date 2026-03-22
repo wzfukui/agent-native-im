@@ -26,10 +26,12 @@ func extractBearer(c *gin.Context) string {
 		return cookie
 	}
 
-	// 3. Query parameter (DEPRECATED — kept for backward compat, e.g. file downloads)
-	if t := c.Query("token"); t != "" {
-		slog.Warn("auth: token passed via query parameter (deprecated)", "path", c.Request.URL.Path)
-		return t
+	// 3. Query parameter (deprecated; allowed only for file downloads)
+	if strings.HasPrefix(c.Request.URL.Path, "/files/") {
+		if t := c.Query("token"); t != "" {
+			slog.Warn("auth: token passed via file query parameter (deprecated)", "path", c.Request.URL.Path)
+			return t
+		}
 	}
 	return ""
 }

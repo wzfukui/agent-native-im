@@ -166,8 +166,8 @@ func TestFileUpload_MimeTypeDetection(t *testing.T) {
 	token := seedAdmin(t)
 
 	cases := []struct {
-		filename     string
-		wantMIMEPfx  string // prefix match to handle charset suffixes
+		filename    string
+		wantMIMEPfx string // prefix match to handle charset suffixes
 	}{
 		{"photo.png", "image/png"},
 		{"document.pdf", "application/pdf"},
@@ -329,7 +329,7 @@ func TestFileDownload_ConversationBound_NonParticipant(t *testing.T) {
 	assertStatus(t, w, http.StatusForbidden)
 }
 
-func TestFileDownload_NoBound_AnyAuth(t *testing.T) {
+func TestFileDownload_NoBound_UploaderOnly(t *testing.T) {
 	truncateAll(t)
 	adminToken := seedAdmin(t)
 
@@ -339,13 +339,13 @@ func TestFileDownload_NoBound_AnyAuth(t *testing.T) {
 	// Upload file without conversation binding
 	storedName := uploadFileGetStoredName(t, adminToken, "public.txt", "public content", "")
 
-	// Second user (any authenticated user) downloads — should succeed
+	// Second user downloads — should now be forbidden
 	w := downloadFile(t, ptr(user2Token), storedName)
-	assertStatus(t, w, http.StatusOK)
+	assertStatus(t, w, http.StatusForbidden)
 
-	if w.Body.String() != "public content" {
-		t.Fatalf("expected 'public content', got %q", w.Body.String())
-	}
+	// Original uploader can still access it
+	w = downloadFile(t, ptr(adminToken), storedName)
+	assertStatus(t, w, http.StatusOK)
 }
 
 func TestFileDownload_NotFound(t *testing.T) {
@@ -369,12 +369,21 @@ func TestFileDownload_LegacyFile(t *testing.T) {
 	}
 	defer os.Remove(legacyPath)
 
-	// Download — no DB record exists, but file is on disk → backward compat should serve it
+	// Download — no DB record exists, but file is on disk → should now be rejected
 	w := downloadFile(t, ptr(token), legacyName)
-	assertStatus(t, w, http.StatusOK)
+	assertStatus(t, w, http.StatusForbidden)
+}
 
-	if w.Body.String() != "legacy content" {
-		t.Fatalf("expected 'legacy content', got %q", w.Body.String())
+func TestFileUpload_BlocksActiveContent(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	cases := []string{"page.html", "vector.svg", "feed.xml"}
+	for _, filename := range cases {
+		t.Run(filename, func(t *testing.T) {
+			w := uploadFile(t, token, filename, "<html><script>alert(1)</script></html>", "")
+			assertStatus(t, w, http.StatusBadRequest)
+		})
 	}
 }
 

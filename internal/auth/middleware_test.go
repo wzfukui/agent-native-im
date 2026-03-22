@@ -45,12 +45,22 @@ func TestExtractBearer_Cookie(t *testing.T) {
 }
 
 func TestExtractBearer_QueryParam(t *testing.T) {
-	r := httptest.NewRequest("GET", "/api/v1/files/download?token=query-token", nil)
+	r := httptest.NewRequest("GET", "/files/example.txt?token=query-token", nil)
 	c := newContext(r)
 
 	got := extractBearer(c)
 	if got != "query-token" {
 		t.Fatalf("expected 'query-token', got %q", got)
+	}
+}
+
+func TestExtractBearer_QueryParamRejectedOutsideFiles(t *testing.T) {
+	r := httptest.NewRequest("GET", "/api/v1/me?token=query-token", nil)
+	c := newContext(r)
+
+	got := extractBearer(c)
+	if got != "" {
+		t.Fatalf("expected empty string for non-file query token, got %q", got)
 	}
 }
 
@@ -68,8 +78,8 @@ func TestExtractBearer_PriorityOrder(t *testing.T) {
 }
 
 func TestExtractBearer_CookieBeforeQuery(t *testing.T) {
-	// When cookie and query are present (no header), cookie wins.
-	r := httptest.NewRequest("GET", "/api/v1/me?token=query-token", nil)
+	// When cookie and query are present on file downloads (no header), cookie wins.
+	r := httptest.NewRequest("GET", "/files/example.txt?token=query-token", nil)
 	r.AddCookie(&http.Cookie{Name: "aim_token", Value: "cookie-token"})
 	c := newContext(r)
 

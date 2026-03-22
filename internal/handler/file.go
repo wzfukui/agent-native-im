@@ -2,8 +2,10 @@ package handler
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"mime"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -22,33 +24,92 @@ var allowedMIMEPrefixes = []string{
 	"image/",
 	"audio/",
 	"video/",
-	"text/",
-	"application/pdf",
-	"application/json",
-	"application/zip",
-	"application/x-tar",
-	"application/gzip",
-	"application/msword",
-	"application/vnd.openxmlformats",
-	"application/vnd.ms-excel",
-	"application/vnd.ms-powerpoint",
 }
 
-func isAllowedMIME(filename string) bool {
-	ext := filepath.Ext(filename)
-	if ext == "" {
+var allowedExactMIMEs = map[string]bool{
+	"text/plain":         true,
+	"text/markdown":      true,
+	"text/csv":           true,
+	"application/json":   true,
+	"application/pdf":    true,
+	"application/zip":    true,
+	"application/x-tar":  true,
+	"application/gzip":   true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
+	"application/vnd.ms-powerpoint":                                             true,
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+}
+
+var blockedActiveMIMEs = map[string]bool{
+	"text/html":             true,
+	"application/xhtml+xml": true,
+	"image/svg+xml":         true,
+	"text/xml":              true,
+	"application/xml":       true,
+}
+
+func normalizeMIME(mimeType string) string {
+	return strings.TrimSpace(strings.Split(mimeType, ";")[0])
+}
+
+func isAllowedMIME(mimeType string) bool {
+	mimeType = normalizeMIME(mimeType)
+	if mimeType == "" || blockedActiveMIMEs[mimeType] {
 		return false
 	}
-	mimeType := mime.TypeByExtension(ext)
-	if mimeType == "" {
-		return false
+	if allowedExactMIMEs[mimeType] {
+		return true
 	}
 	for _, prefix := range allowedMIMEPrefixes {
 		if strings.HasPrefix(mimeType, prefix) {
+			if mimeType == "image/svg+xml" {
+				return false
+			}
 			return true
 		}
 	}
 	return false
+}
+
+func detectUploadMIME(filename string, file multipart.File) (string, bool) {
+	extMime := normalizeMIME(mime.TypeByExtension(filepath.Ext(filename)))
+	buf := make([]byte, 512)
+	n, _ := io.ReadFull(file, buf)
+	if _, err := file.Seek(0, io.SeekStart); err != nil {
+		return "", false
+	}
+	sniffed := normalizeMIME(http.DetectContentType(buf[:n]))
+
+	candidates := []string{extMime, sniffed}
+	for _, candidate := range candidates {
+		if isAllowedMIME(candidate) {
+			return candidate, true
+		}
+	}
+	return "", false
+}
+
+func shouldServeInline(mimeType string) bool {
+	mimeType = normalizeMIME(mimeType)
+	switch {
+	case strings.HasPrefix(mimeType, "image/") && mimeType != "image/svg+xml":
+		return true
+	case strings.HasPrefix(mimeType, "audio/"):
+		return true
+	case strings.HasPrefix(mimeType, "video/"):
+		return true
+	case mimeType == "application/pdf":
+		return true
+	case mimeType == "text/plain":
+		return true
+	case mimeType == "application/json":
+		return true
+	default:
+		return false
+	}
 }
 
 // HandleFileUpload handles multipart file uploads.
@@ -79,7 +140,8 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 	}
 	defer file.Close()
 
-	if !isAllowedMIME(header.Filename) {
+	mimeType, ok := detectUploadMIME(header.Filename, file)
+	if !ok {
 		Fail(c, http.StatusBadRequest, "file type not allowed")
 		return
 	}
@@ -93,12 +155,6 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to save file")
 		return
-	}
-
-	ext := filepath.Ext(header.Filename)
-	mimeType := mime.TypeByExtension(ext)
-	if mimeType == "" {
-		mimeType = "application/octet-stream"
 	}
 
 	// Extract stored filename from URL (last path segment)
@@ -177,13 +233,11 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 	// Look up file record
 	record, err := s.Store.GetFileRecordByStoredName(ctx, filename)
 	if err != nil {
-		// Fallback: if no record exists (legacy files uploaded before this feature),
-		// allow access if the user is authenticated (backward compatibility)
 		if _, statErr := os.Stat(filePath); statErr != nil {
 			Fail(c, http.StatusNotFound, "file not found")
 			return
 		}
-		c.File(filePath)
+		Fail(c, http.StatusForbidden, "file metadata missing")
 		return
 	}
 
@@ -194,6 +248,9 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 			Fail(c, http.StatusForbidden, "you do not have access to this file")
 			return
 		}
+	} else if record.UploaderID != entityID {
+		Fail(c, http.StatusForbidden, "you do not have access to this file")
+		return
 	}
 
 	// Verify file exists on disk
@@ -207,7 +264,11 @@ func (s *Server) HandleFileDownload(c *gin.Context) {
 		c.Header("Content-Type", record.MimeType)
 	}
 	if record.OriginalName != "" {
-		c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, sanitizeFilename(record.OriginalName)))
+		disposition := "attachment"
+		if shouldServeInline(record.MimeType) {
+			disposition = "inline"
+		}
+		c.Header("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, sanitizeFilename(record.OriginalName)))
 	}
 	c.File(filePath)
 }
