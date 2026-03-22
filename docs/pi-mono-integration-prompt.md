@@ -15,7 +15,8 @@ A standalone program (Node.js/TypeScript, Python, Go, or any language you prefer
 
 ```
 IM Server URL:    http://localhost:9800
-WebSocket URL:    ws://localhost:9800/api/v1/ws?token=<YOUR_TOKEN>
+WebSocket URL:    ws://localhost:9800/api/v1/ws
+Authorization:    Bearer <YOUR_TOKEN>
 Bot Token:        8b6ab775-28e5-48ce-9988-67fcaf4df935
 Bot Name:         秘书1号 (Bot ID: 4)
 ```
@@ -52,7 +53,7 @@ Expected response:
 
 Connect to:
 ```
-ws://localhost:9800/api/v1/ws?token=8b6ab775-28e5-48ce-9988-67fcaf4df935
+ws://localhost:9800/api/v1/ws
 ```
 
 You will receive JSON messages with this envelope format:

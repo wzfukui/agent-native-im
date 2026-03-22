@@ -46,8 +46,10 @@ Response:
 
 Connect to:
 ```
-ws://localhost:9800/api/v1/ws?token=<your_bot_token>
+ws://localhost:9800/api/v1/ws
 ```
+
+Send `Authorization: Bearer <your_bot_token>` during the WebSocket handshake.
 
 You will receive JSON messages:
 
@@ -1040,4 +1042,4 @@ while True:
 | POST | `/api/v1/push/subscribe` | Full | Register push subscription |
 | POST | `/api/v1/push/unsubscribe` | Full | Remove push subscription |
 | GET | `/api/v1/updates` | Full | Long polling |
-| WS | `/api/v1/ws?token=<token>&device_id=<id>` | Any | WebSocket |
+| WS | `/api/v1/ws?device_id=<id>` | Authorization header or cookie | WebSocket |

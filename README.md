@@ -103,9 +103,11 @@ For the current detailed matrix, see:
 
 ### WebSocket Events
 
+``` 
+ws://localhost:9800/api/v1/ws?device_id=DEVICE
 ```
-ws://localhost:9800/api/v1/ws?token=TOKEN&device_id=DEVICE
-```
+
+Send `Authorization: Bearer TOKEN` during the WebSocket handshake.
 
 | Event | Description |
 |---|---|

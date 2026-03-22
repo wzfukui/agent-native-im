@@ -25,16 +25,16 @@ var upgrader = gorillaWs.Upgrader{
 		allowedOrigins := []string{
 			"https://agent-native.im",
 			"https://expo.agent-native.im",
-			"http://localhost:3000",     // Development
-			"http://localhost:5173",     // Vite dev server
-			"http://localhost:8081",     // Expo dev server
-			"http://localhost:19006",    // Expo web
-			"http://192.168.44.43:3000", // Local network testing
-			"http://192.168.44.43:8081", // Expo on server
-			"http://192.168.44.43:9800", // Native client via direct IP
+			"http://localhost:3000",      // Development
+			"http://localhost:5173",      // Vite dev server
+			"http://localhost:8081",      // Expo dev server
+			"http://localhost:19006",     // Expo web
+			"http://192.168.44.43:3000",  // Local network testing
+			"http://192.168.44.43:8081",  // Expo on server
+			"http://192.168.44.43:9800",  // Native client via direct IP
 			"http://192.168.44.43:19006", // Expo web on server
-			"http://127.0.0.1:3000",     // Alternative localhost
-			"http://127.0.0.1:5173",     // Alternative Vite
+			"http://127.0.0.1:3000",      // Alternative localhost
+			"http://127.0.0.1:5173",      // Alternative Vite
 		}
 
 		// Allow requests without origin header (same-origin or non-browser clients)
@@ -55,7 +55,12 @@ var upgrader = gorillaWs.Upgrader{
 }
 
 func (s *Server) HandleWS(c *gin.Context) {
-	token := c.Query("token")
+	token := c.GetHeader("Authorization")
+	if len(token) > 7 && token[:7] == "Bearer " {
+		token = token[7:]
+	} else {
+		token = ""
+	}
 	if token == "" {
 		// Fallback: read from cookie (browser WebSocket sends cookies automatically)
 		if cookie, err := c.Cookie("aim_token"); err == nil && cookie != "" {
@@ -63,7 +68,7 @@ func (s *Server) HandleWS(c *gin.Context) {
 		}
 	}
 	if token == "" {
-		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required (via query parameter or cookie)")
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required (via Authorization header or cookie)")
 		return
 	}
 

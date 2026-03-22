@@ -115,8 +115,8 @@ func TestWSConnectWithPermanentKey(t *testing.T) {
 	defer ts.Close()
 
 	// Connect WebSocket with permanent key — should work immediately
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], apiKey)
-	wsConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	wsConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + apiKey}})
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}

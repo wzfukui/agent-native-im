@@ -18,8 +18,8 @@ func TestWebSocketConnect(t *testing.T) {
 	ts := newWSTestServer(t)
 	defer ts.Close()
 
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], token)
-	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + token}})
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}
@@ -78,8 +78,8 @@ func TestWebSocketSendMessage(t *testing.T) {
 	ts := newWSTestServer(t)
 	defer ts.Close()
 
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], token)
-	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + token}})
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}
@@ -147,16 +147,16 @@ func TestWebSocketStreamProtocol(t *testing.T) {
 	defer ts.Close()
 
 	// Sender (admin) connects
-	senderURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], token)
-	senderConn, _, err := gorillaWs.DefaultDialer.Dial(senderURL, nil)
+	senderURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	senderConn, _, err := gorillaWs.DefaultDialer.Dial(senderURL, http.Header{"Authorization": []string{"Bearer " + token}})
 	if err != nil {
 		t.Fatalf("ws dial sender: %v", err)
 	}
 	defer senderConn.Close()
 
 	// Receiver (bot) connects with permanent key
-	receiverURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], botKey)
-	receiverConn, _, err := gorillaWs.DefaultDialer.Dial(receiverURL, nil)
+	receiverURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	receiverConn, _, err := gorillaWs.DefaultDialer.Dial(receiverURL, http.Header{"Authorization": []string{"Bearer " + botKey}})
 	if err != nil {
 		t.Fatalf("ws dial receiver: %v", err)
 	}
@@ -258,8 +258,8 @@ func TestWebSocketPermanentKey(t *testing.T) {
 	defer ts.Close()
 
 	// Should be able to connect with permanent key
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], apiKey)
-	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + apiKey}})
 	if err != nil {
 		t.Fatalf("ws dial with permanent key: %v", err)
 	}
@@ -300,8 +300,8 @@ func TestWebSocketRevokeEvent(t *testing.T) {
 	defer ts.Close()
 
 	// Observer connects via WS
-	observerURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], observerToken)
-	observerConn, _, err := gorillaWs.DefaultDialer.Dial(observerURL, nil)
+	observerURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	observerConn, _, err := gorillaWs.DefaultDialer.Dial(observerURL, http.Header{"Authorization": []string{"Bearer " + observerToken}})
 	if err != nil {
 		t.Fatalf("ws dial observer: %v", err)
 	}
@@ -371,8 +371,8 @@ func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
 	ts := newWSTestServer(t)
 	defer ts.Close()
 
-	wsURL := fmt.Sprintf("ws%s/api/v1/ws?token=%s", ts.URL[len("http"):], human2Token)
-	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, nil)
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	conn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + human2Token}})
 	if err != nil {
 		t.Fatalf("ws dial: %v", err)
 	}

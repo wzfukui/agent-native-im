@@ -282,10 +282,14 @@ function handleIncomingMessage(ws: WebSocket, message: IncomingMessage): void {
 
 // Create and manage WebSocket connection
 function createWebSocket(): WebSocket {
-  const wsUrl = `${CONFIG.wsUrl}?token=${CONFIG.botToken}`;
+  const wsUrl = CONFIG.wsUrl;
   console.log(`Connecting to IM server: ${wsUrl}`);
 
-  const ws = new WebSocket(wsUrl);
+  const ws = new WebSocket(wsUrl, {
+    headers: {
+      Authorization: `Bearer ${CONFIG.botToken}`,
+    },
+  });
 
   ws.on("open", () => {
     console.log("✅ Connected to IM server successfully!");
