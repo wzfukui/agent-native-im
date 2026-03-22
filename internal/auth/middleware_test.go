@@ -44,13 +44,13 @@ func TestExtractBearer_Cookie(t *testing.T) {
 	}
 }
 
-func TestExtractBearer_QueryParam(t *testing.T) {
+func TestExtractBearer_QueryParamRejectedForFiles(t *testing.T) {
 	r := httptest.NewRequest("GET", "/files/example.txt?token=query-token", nil)
 	c := newContext(r)
 
 	got := extractBearer(c)
-	if got != "query-token" {
-		t.Fatalf("expected 'query-token', got %q", got)
+	if got != "" {
+		t.Fatalf("expected empty string for file query token, got %q", got)
 	}
 }
 
@@ -77,8 +77,8 @@ func TestExtractBearer_PriorityOrder(t *testing.T) {
 	}
 }
 
-func TestExtractBearer_CookieBeforeQuery(t *testing.T) {
-	// When cookie and query are present on file downloads (no header), cookie wins.
+func TestExtractBearer_CookieWithoutQueryFallback(t *testing.T) {
+	// File query tokens are no longer supported; cookie auth still works.
 	r := httptest.NewRequest("GET", "/files/example.txt?token=query-token", nil)
 	r.AddCookie(&http.Cookie{Name: "aim_token", Value: "cookie-token"})
 	c := newContext(r)

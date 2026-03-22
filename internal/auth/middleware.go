@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -24,14 +23,6 @@ func extractBearer(c *gin.Context) string {
 	// 2. HttpOnly cookie (web browser sessions)
 	if cookie, err := c.Cookie("aim_token"); err == nil && cookie != "" {
 		return cookie
-	}
-
-	// 3. Query parameter (deprecated; allowed only for file downloads)
-	if strings.HasPrefix(c.Request.URL.Path, "/files/") {
-		if t := c.Query("token"); t != "" {
-			slog.Warn("auth: token passed via file query parameter (deprecated)", "path", c.Request.URL.Path)
-			return t
-		}
 	}
 	return ""
 }
