@@ -255,6 +255,108 @@ func TestAddParticipantAdminRoleElevation(t *testing.T) {
 	assertStatus(t, resp, http.StatusForbidden)
 }
 
+func TestMemberCanAddOwnedBotToConversation(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "member-owner",
+		"password": "Memberpass1",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	memberData := parseOK(t, resp)
+	memberID := int(memberData["id"].(float64))
+	memberToken := login(t, "member-owner", "Memberpass1")
+
+	resp = doJSON(t, "POST", "/api/v1/entities", ptr(memberToken), map[string]string{"name": "member-owned-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := int(botEntity["id"].(float64))
+
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{
+		"title":           "Owned Bot Join",
+		"conv_type":       "group",
+		"participant_ids": []float64{float64(memberID)},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/participants", convID), ptr(memberToken), map[string]interface{}{
+		"entity_id": botID,
+	})
+	assertStatus(t, resp, http.StatusCreated)
+}
+
+func TestMemberCannotAddOtherUsersBotToConversation(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "member-other-bot",
+		"password": "Memberpass1",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	memberData := parseOK(t, resp)
+	memberID := int(memberData["id"].(float64))
+	memberToken := login(t, "member-other-bot", "Memberpass1")
+
+	resp = doJSON(t, "POST", "/api/v1/entities", ptr(adminToken), map[string]string{"name": "admin-owned-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := int(botEntity["id"].(float64))
+
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{
+		"title":           "Foreign Bot Join",
+		"conv_type":       "group",
+		"participant_ids": []float64{float64(memberID)},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/participants", convID), ptr(memberToken), map[string]interface{}{
+		"entity_id": botID,
+	})
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
+func TestMemberCannotAddOwnedBotToDirectConversation(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(adminToken), map[string]string{
+		"username": "member-direct-bot",
+		"password": "Memberpass1",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	memberData := parseOK(t, resp)
+	memberID := int(memberData["id"].(float64))
+	memberToken := login(t, "member-direct-bot", "Memberpass1")
+
+	resp = doJSON(t, "POST", "/api/v1/entities", ptr(memberToken), map[string]string{"name": "member-direct-owned-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := int(botEntity["id"].(float64))
+
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{
+		"title":           "Owned Bot Direct",
+		"conv_type":       "direct",
+		"participant_ids": []float64{float64(memberID)},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/participants", convID), ptr(memberToken), map[string]interface{}{
+		"entity_id": botID,
+	})
+	assertStatus(t, resp, http.StatusForbidden)
+}
+
 func TestUpdateSubscription(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

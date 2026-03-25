@@ -303,9 +303,33 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 		FailWithCode(c, http.StatusForbidden, ErrCodePermNotParticipant, "not a participant of this conversation")
 		return
 	}
-	if caller.Role != model.RoleOwner && caller.Role != model.RoleAdmin {
-		FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "only owner or admin can add participants")
+
+	target, err := s.Store.GetEntityByID(ctx, req.EntityID)
+	if err != nil || target == nil {
+		Fail(c, http.StatusNotFound, "entity not found")
 		return
+	}
+
+	canManageMembers := caller.Role == model.RoleOwner || caller.Role == model.RoleAdmin
+	if !canManageMembers {
+		conv, err := s.Store.GetConversation(ctx, convID)
+		if err != nil || conv == nil {
+			Fail(c, http.StatusNotFound, "conversation not found")
+			return
+		}
+		if conv.ConvType != model.ConvGroup && conv.ConvType != model.ConvChannel {
+			FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "members can only add their own bots to group or channel conversations")
+			return
+		}
+		// Regular members can only add their own bots as regular members.
+		if target.EntityType != model.EntityBot || target.OwnerID == nil || *target.OwnerID != entityID {
+			FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "only owner or admin can add other participants")
+			return
+		}
+		if req.Role != "" && req.Role != "member" {
+			FailWithCode(c, http.StatusForbidden, ErrCodePermNotAdmin, "members can only add their own bots as members")
+			return
+		}
 	}
 
 	role := model.RoleMember
@@ -332,9 +356,8 @@ func (s *Server) HandleAddParticipant(c *gin.Context) {
 
 	// System message
 	adder, _ := s.Store.GetEntityByID(ctx, entityID)
-	added, _ := s.Store.GetEntityByID(ctx, req.EntityID)
 	s.broadcastSystemMessage(c, convID, entityID,
-		fmt.Sprintf("%s 邀请 %s 加入了群聊", getEntityDisplayName(adder), getEntityDisplayName(added)))
+		fmt.Sprintf("%s 邀请 %s 加入了群聊", getEntityDisplayName(adder), getEntityDisplayName(target)))
 
 	// Broadcast conversation update
 	if s.Hub != nil {
