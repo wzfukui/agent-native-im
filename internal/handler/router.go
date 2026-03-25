@@ -206,18 +206,6 @@ func NewRouter(s *Server) *gin.Engine {
 }
 
 func corsMiddleware() gin.HandlerFunc {
-	// Security: Whitelist of allowed origins
-	allowedOrigins := map[string]bool{
-		"https://agent-native.im":   true,
-		"https://expo.agent-native.im": true,
-		"http://localhost:3000":     true, // Development
-		"http://localhost:5173":     true, // Vite dev server
-		"http://localhost:19006":    true, // Expo web dev server
-		"http://192.168.44.43:3000": true, // Local network testing
-		"http://127.0.0.1:3000":     true, // Alternative localhost
-		"http://127.0.0.1:5173":     true, // Alternative Vite
-	}
-
 	return func(c *gin.Context) {
 		origin := c.GetHeader("Origin")
 
@@ -225,7 +213,7 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Headers", "Origin, Content-Type, Authorization")
 		c.Header("Access-Control-Max-Age", "86400")
 
-		if origin != "" && allowedOrigins[origin] {
+		if origin != "" && isAllowedBrowserOrigin(origin) {
 			// Allowed origin: enable credentials
 			c.Header("Access-Control-Allow-Origin", origin)
 			c.Header("Access-Control-Allow-Credentials", "true")
@@ -269,7 +257,7 @@ func securityHeaders() gin.HandlerFunc {
 			"img-src 'self' data: https:; " +
 			"script-src 'self' 'unsafe-inline' 'unsafe-eval'; " + // unsafe-eval needed for React dev tools
 			"style-src 'self' 'unsafe-inline'; " +
-			"connect-src 'self' wss://agent-native.im wss://expo.agent-native.im ws://localhost:* ws://127.0.0.1:* ws://192.168.44.43:*; " +
+			"connect-src 'self' https: wss: http://localhost:* http://127.0.0.1:* http://192.168.44.43:* ws://localhost:* ws://127.0.0.1:* ws://192.168.44.43:*; " +
 			"font-src 'self' data:; " +
 			"object-src 'none'; " +
 			"frame-ancestors 'none'"

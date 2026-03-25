@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -20,33 +22,12 @@ import (
 
 var upgrader = gorillaWs.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		// Security: Whitelist allowed origins for WebSocket connections
 		origin := r.Header.Get("Origin")
-		allowedOrigins := []string{
-			"https://agent-native.im",
-			"https://expo.agent-native.im",
-			"http://localhost:3000",      // Development
-			"http://localhost:5173",      // Vite dev server
-			"http://localhost:8081",      // Expo dev server
-			"http://localhost:19006",     // Expo web
-			"http://192.168.44.43:3000",  // Local network testing
-			"http://192.168.44.43:8081",  // Expo on server
-			"http://192.168.44.43:9800",  // Native client via direct IP
-			"http://192.168.44.43:19006", // Expo web on server
-			"http://127.0.0.1:3000",      // Alternative localhost
-			"http://127.0.0.1:5173",      // Alternative Vite
-		}
-
-		// Allow requests without origin header (same-origin or non-browser clients)
 		if origin == "" {
 			return true
 		}
-
-		// Check against whitelist
-		for _, allowed := range allowedOrigins {
-			if origin == allowed {
-				return true
-			}
+		if isAllowedBrowserOrigin(origin) {
+			return true
 		}
 
 		slog.Warn("WebSocket connection rejected", "origin", origin)
@@ -54,21 +35,48 @@ var upgrader = gorillaWs.Upgrader{
 	},
 }
 
-func (s *Server) HandleWS(c *gin.Context) {
-	token := c.GetHeader("Authorization")
-	if len(token) > 7 && token[:7] == "Bearer " {
-		token = token[7:]
-	} else {
-		token = ""
+const wsBearerSubprotocolPrefix = "ani.bearer."
+
+func isAllowedBrowserOrigin(origin string) bool {
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return false
 	}
-	if token == "" {
-		// Fallback: read from cookie (browser WebSocket sends cookies automatically)
-		if cookie, err := c.Cookie("aim_token"); err == nil && cookie != "" {
-			token = cookie
+
+	switch parsed.Scheme {
+	case "https":
+		return true
+	case "http":
+		host := parsed.Hostname()
+		return host == "localhost" || host == "127.0.0.1" || strings.HasPrefix(host, "192.168.")
+	default:
+		return false
+	}
+}
+
+func extractWebSocketToken(r *http.Request) (token string, selectedSubprotocol string) {
+	authHeader := r.Header.Get("Authorization")
+	if strings.HasPrefix(authHeader, "Bearer ") {
+		return authHeader[7:], ""
+	}
+
+	for _, protocol := range gorillaWs.Subprotocols(r) {
+		if strings.HasPrefix(protocol, wsBearerSubprotocolPrefix) {
+			return strings.TrimPrefix(protocol, wsBearerSubprotocolPrefix), protocol
 		}
 	}
+
+	if cookie, err := r.Cookie("aim_token"); err == nil && cookie.Value != "" {
+		return cookie.Value, ""
+	}
+
+	return "", ""
+}
+
+func (s *Server) HandleWS(c *gin.Context) {
+	token, selectedSubprotocol := extractWebSocketToken(c.Request)
 	if token == "" {
-		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required (via Authorization header or cookie)")
+		FailWithCode(c, http.StatusUnauthorized, ErrCodeAuthRequired, "token required (via Authorization header, WebSocket subprotocol, or cookie)")
 		return
 	}
 
@@ -108,7 +116,12 @@ func (s *Server) HandleWS(c *gin.Context) {
 	}
 	deviceInfo := c.Query("device_info")
 
-	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	wsUpgrader := upgrader
+	if selectedSubprotocol != "" {
+		wsUpgrader.Subprotocols = []string{selectedSubprotocol}
+	}
+
+	conn, err := wsUpgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		slog.Error("ws: upgrade error", "entity_id", entityID, "error", err)
 		return
