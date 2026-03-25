@@ -51,6 +51,34 @@ var blockedActiveMIMEs = map[string]bool{
 	"application/xml":       true,
 }
 
+var blockedUploadExtensions = map[string]bool{
+	"":      true,
+	".apk":  true,
+	".app":  true,
+	".bat":  true,
+	".cmd":  true,
+	".com":  true,
+	".cpl":  true,
+	".dll":  true,
+	".dmg":  true,
+	".exe":  true,
+	".hta":  true,
+	".iso":  true,
+	".jar":  true,
+	".js":   true,
+	".jse":  true,
+	".lnk":  true,
+	".msi":  true,
+	".pkg":  true,
+	".ps1":  true,
+	".scr":  true,
+	".sh":   true,
+	".vb":   true,
+	".vbe":  true,
+	".vbs":  true,
+	".wsf":  true,
+}
+
 func normalizeMIME(mimeType string) string {
 	return strings.TrimSpace(strings.Split(mimeType, ";")[0])
 }
@@ -75,7 +103,11 @@ func isAllowedMIME(mimeType string) bool {
 }
 
 func detectUploadMIME(filename string, file multipart.File) (string, bool) {
-	extMime := normalizeMIME(mime.TypeByExtension(filepath.Ext(filename)))
+	ext := strings.ToLower(filepath.Ext(filename))
+	if blockedUploadExtensions[ext] {
+		return "", false
+	}
+	extMime := normalizeMIME(mime.TypeByExtension(ext))
 	buf := make([]byte, 512)
 	n, _ := io.ReadFull(file, buf)
 	if _, err := file.Seek(0, io.SeekStart); err != nil {
