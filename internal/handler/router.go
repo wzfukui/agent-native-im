@@ -94,7 +94,7 @@ func NewRouter(s *Server) *gin.Engine {
 					admin.GET("/admin/stats", s.HandleAdminStats)
 					admin.GET("/admin/conversations", s.HandleAdminListConversations)
 					admin.GET("/admin/audit-logs", s.HandleAdminListAuditLogs)
-				admin.POST("/admin/reset-password", s.HandleAdminResetPassword)
+					admin.POST("/admin/reset-password", s.HandleAdminResetPassword)
 				}
 				// Entity management (user-only at handler level)
 				full.POST("/entities", s.HandleCreateEntity)

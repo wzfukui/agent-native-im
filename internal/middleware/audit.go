@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -45,9 +46,10 @@ func Audit(s ...store.Store) gin.HandlerFunc {
 				if entityID > 0 {
 					eid = &entityID
 				}
+				action := buildAuditAction(c.Request.Method, c.Request.URL.Path)
 				entry := &model.AuditLog{
 					EntityID:  eid,
-					Action:    c.Request.Method + " " + c.Request.URL.Path,
+					Action:    action,
 					Details:   details,
 					IPAddress: c.ClientIP(),
 				}
@@ -57,4 +59,24 @@ func Audit(s ...store.Store) gin.HandlerFunc {
 			}()
 		}
 	}
+}
+
+func buildAuditAction(method, path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return method
+	}
+	action := method + " " + path
+	if len(action) <= 50 {
+		return action
+	}
+	trimmedPath := path
+	if len(trimmedPath) > 40 {
+		trimmedPath = "..." + trimmedPath[len(trimmedPath)-37:]
+	}
+	action = method + " " + trimmedPath
+	if len(action) > 50 {
+		return action[:50]
+	}
+	return action
 }
