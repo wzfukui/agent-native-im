@@ -16,10 +16,13 @@
 - [ ] Copy binary to `/opt/agent-im/agent-native-im`
 - [ ] `sudo systemctl start agent-im`
 - [ ] `sudo systemctl is-active agent-im` returns `active`
+- [ ] Reverse proxy explicitly upgrades `GET /api/v1/ws`
+- [ ] Reverse proxy forwards `Sec-WebSocket-Protocol` and `Authorization` to backend
 
 ## Post-check
 - [ ] Verify logs have no panic or repeated 5xx
 - [ ] Check key endpoints:
   - [ ] `/api/v1/conversations/public/:publicId`
   - [ ] `/api/v1/entities/:id/diagnostics`
+- [ ] Confirm browser WebSocket handshake returns `101 Switching Protocols` on `/api/v1/ws`
 - [ ] Rollback plan confirmed (last known good binary)

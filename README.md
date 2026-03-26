@@ -109,6 +109,37 @@ ws://localhost:9800/api/v1/ws?device_id=DEVICE
 
 Send `Authorization: Bearer TOKEN` during the WebSocket handshake.
 
+### Reverse Proxy Requirement
+
+If ANI runs behind Nginx or another reverse proxy, `/api/v1/ws` must be handled as a WebSocket upgrade route.
+
+At minimum, forward:
+
+- `Upgrade`
+- `Connection: Upgrade`
+- `Sec-WebSocket-Protocol`
+- `Authorization`
+
+Example Nginx block:
+
+```nginx
+location = /api/v1/ws {
+    proxy_pass http://127.0.0.1:9800;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "Upgrade";
+    proxy_set_header Sec-WebSocket-Protocol $http_sec_websocket_protocol;
+    proxy_set_header Authorization $http_authorization;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 3600;
+}
+```
+
+If `/api/v1/ws` falls through a generic `/api/` proxy block without the upgrade headers, browser clients can get stuck in session bootstrap or never complete the WebSocket handshake.
+
 | Event | Description |
 |---|---|
 | `message.new` | New message |
