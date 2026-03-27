@@ -21,6 +21,7 @@ type Store interface {
 	PushStore
 	InviteStore
 	FriendStore
+	BotAccessStore
 	TaskStore
 	MemoryStore
 	ChangeRequestStore
@@ -78,6 +79,15 @@ type FriendStore interface {
 	GetFriendship(ctx context.Context, entityA, entityB int64) (*model.Friendship, error)
 	ListFriends(ctx context.Context, entityID int64) ([]*model.Entity, error)
 	DeleteFriendship(ctx context.Context, entityA, entityB int64) error
+}
+
+type BotAccessStore interface {
+	CreateBotAccessLink(ctx context.Context, link *model.BotAccessLink) error
+	GetBotAccessLinkByID(ctx context.Context, id int64) (*model.BotAccessLink, error)
+	GetBotAccessLinkByCode(ctx context.Context, code string) (*model.BotAccessLink, error)
+	ListBotAccessLinks(ctx context.Context, botEntityID int64) ([]*model.BotAccessLink, error)
+	IncrementBotAccessLinkUseCount(ctx context.Context, id int64) error
+	DeleteBotAccessLink(ctx context.Context, id int64) error
 }
 
 type CredentialStore interface {

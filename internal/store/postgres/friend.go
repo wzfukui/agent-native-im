@@ -63,9 +63,9 @@ func (s *PGStore) ListFriendRequestsByEntity(ctx context.Context, entityID int64
 		})
 	}
 	if status != "" {
-		q = q.Where("status = ?", status)
+		q = q.Where("friend_request.status = ?", status)
 	}
-	err := q.OrderExpr("created_at DESC").Scan(ctx)
+	err := q.OrderExpr("friend_request.created_at DESC").Scan(ctx)
 	return reqs, err
 }
 

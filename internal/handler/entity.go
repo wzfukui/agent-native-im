@@ -16,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/ws"
@@ -669,6 +670,8 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 		AvatarURL          *string                `json:"avatar_url"`
 		Discoverability    *string                `json:"discoverability"`
 		AllowNonFriendChat *bool                  `json:"allow_non_friend_chat"`
+		RequireAccessPassword *bool               `json:"require_access_password"`
+		AccessPassword     *string                `json:"access_password"`
 		Metadata           map[string]interface{} `json:"metadata"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -732,6 +735,47 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 			return
 		}
 		target.AllowNonFriendChat = *req.AllowNonFriendChat
+	}
+	if req.RequireAccessPassword != nil {
+		if target.EntityType != model.EntityBot && target.EntityType != model.EntityService {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "require_access_password is only supported for bots and services")
+			return
+		}
+		target.RequireAccessPassword = *req.RequireAccessPassword
+	}
+	if req.AccessPassword != nil {
+		if target.EntityType != model.EntityBot && target.EntityType != model.EntityService {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "access_password is only supported for bots and services")
+			return
+		}
+		password := strings.TrimSpace(*req.AccessPassword)
+		if password == "" {
+			target.AccessPasswordHash = ""
+			target.RequireAccessPassword = false
+		} else {
+			hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+			if err != nil {
+				Fail(c, http.StatusInternalServerError, "failed to hash access password")
+				return
+			}
+			target.AccessPasswordHash = string(hash)
+		}
+	}
+	if target.RequireAccessPassword {
+		if target.Discoverability != "external_public" {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "password protection requires external_public discoverability")
+			return
+		}
+		if strings.TrimSpace(target.AccessPasswordHash) == "" {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "access_password is required when password protection is enabled")
+			return
+		}
+	}
+	if target.Discoverability != "external_public" {
+		target.RequireAccessPassword = false
+		if req.AccessPassword != nil && strings.TrimSpace(*req.AccessPassword) == "" {
+			target.AccessPasswordHash = ""
+		}
 	}
 	if req.Metadata != nil {
 		// Merge new metadata into existing

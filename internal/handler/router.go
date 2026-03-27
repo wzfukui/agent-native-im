@@ -63,6 +63,8 @@ func NewRouter(s *Server) *gin.Engine {
 
 		// Public push key endpoint (no auth needed)
 		v1.GET("/push/vapid-key", s.HandleGetVAPIDKey)
+		v1.GET("/public/bots/:identifier", s.HandleGetPublicBot)
+		v1.POST("/public/bots/:identifier/session", rateLimiters["login"].Middleware(), s.HandleCreatePublicBotSession)
 
 		// Authenticated (any entity type, including bootstrap keys)
 		authed := v1.Group("")
@@ -113,6 +115,9 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/entities/:id/regenerate-token", s.HandleRegenerateEntityToken)
 				full.POST("/entities/:id/reactivate", s.HandleReactivateEntity)
 				full.POST("/presence/batch", s.HandleBatchPresence)
+				full.POST("/bots/:id/access-links", s.HandleCreateBotAccessLink)
+				full.GET("/bots/:id/access-links", s.HandleListBotAccessLinks)
+				full.DELETE("/bot-access-links/:id", s.HandleDeleteBotAccessLink)
 
 				// Friends
 				full.GET("/friends", s.HandleListFriends)

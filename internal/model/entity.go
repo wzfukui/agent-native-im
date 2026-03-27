@@ -29,6 +29,8 @@ type Entity struct {
 	Status             string          `bun:"status,notnull,default:'active'" json:"status"`
 	Discoverability    string          `bun:"discoverability,notnull,default:'private'" json:"discoverability,omitempty"`
 	AllowNonFriendChat bool            `bun:"allow_non_friend_chat,notnull,default:false" json:"allow_non_friend_chat"`
+	RequireAccessPassword bool         `bun:"require_access_password,notnull,default:false" json:"require_access_password"`
+	AccessPasswordHash  string         `bun:"access_password_hash,nullzero" json:"-"`
 	Metadata           json.RawMessage `bun:"metadata,type:jsonb,notnull,default:'{}'" json:"metadata,omitempty"`
 	OwnerID            *int64          `bun:"owner_id" json:"owner_id,omitempty"`
 	CreatedAt          time.Time       `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`

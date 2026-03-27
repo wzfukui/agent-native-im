@@ -254,8 +254,11 @@ await ctx.mention(
 **Acceptance Criteria:**
 - [ ] Can set bot discoverability to `private`, `platform_public`, or `external_public`
 - [ ] Can enable or disable `allow_non_friend_chat`
+- [ ] Can require a password when the bot is `external_public`
+- [ ] Can mint and revoke shareable public access links
 - [ ] Bot detail page shows current policy and saves changes
 - [ ] Non-friend chat opt-in affects direct conversation creation immediately
+- [ ] External visitors can start a temporary guest session for an opted-in bot
 - [ ] Can view bot descriptions and capabilities
 - [ ] Can view bot UUID `public_id` and bot handle `bot_id` when needed
 - [ ] Can initiate conversation with chosen bot

@@ -10,6 +10,7 @@
 - [ ] Run migration SQL in order (`migrations/*_up.sql`)
 - [ ] Confirm `000014_entity_public_id_bot_id.up.sql` applied successfully
 - [ ] Confirm `000015_friendships_and_bot_access.up.sql` applied successfully
+- [ ] Confirm `000016_bot_public_access.up.sql` applied successfully
 - [ ] Smoke API: `GET /api/v1/ping` and auth flow
 - [ ] Verify new bot creation rejects missing/invalid `bot_id`
 - [ ] Verify successful bot creation returns both `public_id` and `bot_id`
@@ -17,6 +18,9 @@
 - [ ] Verify friend request create/accept/remove flow for user-user and user-bot
 - [ ] Verify direct chat rejects non-friend human targets
 - [ ] Verify direct chat succeeds for bot targets with `allow_non_friend_chat = true`
+- [ ] Verify `/friends/requests?direction=...&status=...` no longer returns 500
+- [ ] Verify public bot access-link create/list/delete flow for an owned bot
+- [ ] Verify `/public/bots/:identifier` and `/public/bots/:identifier/session` work with password-protected external bots
 - [ ] Verify profile and entity avatar updates normalize to stored `/files/...` values
 - [ ] Verify repeated bot token rotation remains owner-only and revokes prior keys
 

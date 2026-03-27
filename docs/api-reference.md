@@ -183,6 +183,8 @@ Update an owned entity's display name, avatar, metadata, or bot access policy.
     "avatar_url": "string (optional)",
     "discoverability": "private|platform_public|external_public (bots/services only)",
     "allow_non_friend_chat": "boolean (bots/services only)",
+    "require_access_password": "boolean (bots/services only, external_public only)",
+    "access_password": "string (optional, set/rotate public password)",
     "metadata": {}
   }
   ```
@@ -245,6 +247,48 @@ Delete an existing friendship between the acting entity and the target entity.
 - **Auth**: Required
 - **Query**:
   - `entity_id` optional when acting as an owned bot
+
+## Public Bot Access
+
+### POST /bots/:id/access-links
+### GET /bots/:id/access-links
+### DELETE /bot-access-links/:id
+
+Manage shareable public access links for an owned externally-public bot.
+
+- **Auth**: Required (user only, must be owner)
+- **Notes**:
+  - Access links are intended for customer-service or demo entry points
+  - Links may optionally expire or enforce max use counts
+
+### GET /public/bots/:identifier
+
+Fetch the public profile of a bot by `bot_id` or entity `public_id`.
+
+- **Auth**: Not required
+- **Query**:
+  - `code` optional public access code
+- **Response** `200`:
+  - `bot`
+  - `access_code`
+
+### POST /public/bots/:identifier/session
+
+Create a temporary guest session for an externally-public bot.
+
+- **Auth**: Not required
+- **Request body**:
+  ```json
+  {
+    "access_code": "optional share code",
+    "password": "optional public access password",
+    "display_name": "optional guest display name"
+  }
+  ```
+- **Response** `201`:
+  - `token`: temporary visitor JWT
+  - `visitor`: temporary visitor entity
+  - `conversation`: the created direct conversation with the bot
 
 ### DELETE /entities/:id
 

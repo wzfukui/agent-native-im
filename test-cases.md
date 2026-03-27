@@ -150,6 +150,43 @@ This document contains detailed test cases for all platform features, including 
 **Expected Result:**
 - Bot X is not returned in results
 
+### TC-BOT-ACCESS-004: External Public Bot Requires Password
+**Priority:** High
+**Component:** Public Bot Access
+
+**Preconditions:**
+- Bot X exists with `discoverability = external_public`
+- Bot X has `require_access_password = true`
+- Bot X has a valid public access password
+
+**Steps:**
+1. Load `/public/bots/<bot_id>`
+2. Attempt to create a public session with the wrong password
+3. Retry with the correct password
+
+**Expected Result:**
+- Step 2 fails with `401`
+- Step 3 succeeds with `201`
+- A temporary visitor session and direct conversation are created
+
+### TC-BOT-ACCESS-005: Public Access Link Creates Guest Session
+**Priority:** High
+**Component:** Public Bot Access Links
+
+**Preconditions:**
+- Bot X exists and is externally public
+- Owner created at least one access link for Bot X
+
+**Steps:**
+1. Open `/public/bots/<bot_id>?code=<link_code>`
+2. Start a guest session
+3. Send a message into the returned conversation
+
+**Expected Result:**
+- Public bot landing page loads
+- Guest session is created successfully
+- Guest can send a message into the direct conversation
+
 ## 3. Message Deduplication Tests
 
 ### TC-DEDUP-001: Prevent Duplicate Messages on Reconnection

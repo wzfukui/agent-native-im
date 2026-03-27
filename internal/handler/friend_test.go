@@ -38,6 +38,13 @@ func TestFriendRequestLifecycle(t *testing.T) {
 		t.Fatalf("expected 1 incoming request, got %d", len(incoming))
 	}
 
+	resp = doJSON(t, "GET", "/api/v1/friends/requests?direction=outgoing&status=pending", ptr(userAToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	outgoing := parseResponse(t, resp)["data"].([]interface{})
+	if len(outgoing) != 1 {
+		t.Fatalf("expected 1 pending outgoing request, got %d", len(outgoing))
+	}
+
 	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/friends/requests/%d/accept", reqID), ptr(userBToken), nil)
 	assertStatus(t, resp, http.StatusOK)
 
