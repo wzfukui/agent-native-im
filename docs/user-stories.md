@@ -256,7 +256,9 @@ await ctx.mention(
 - [ ] Friend request notifications identify the actor and recipient entity
 - [ ] Incoming friend requests can be accepted or rejected directly from the inbox
 - [ ] Accepted requests appear in the friends graph after refresh
-- [ ] Notification badges update via WebSocket when available and polling fallback otherwise
+- [ ] Sidebar and mobile badges are derived from the same inbox state as the inbox page
+- [ ] Active sessions receive `notification.*` and `friend.request.*` events over WebSocket
+- [ ] Inbox state updates live, with periodic refresh used only as a recovery fallback
 
 #### Story: Configuring A Support Bot
 **As a** bot owner

@@ -122,6 +122,8 @@ This document contains detailed test cases for all platform features, including 
 - User B receives `friend.request.received`
 - User A receives `friend.request.accepted`
 - Marking read updates `status` and `read_at`
+- Active inbox view updates without waiting for the next polling tick
+- Sidebar/mobile badges stay in sync with inbox state
 - Both sides appear in `/friends`
 
 ### TC-BOT-ACCESS-001: Direct User Chat Requires Friendship

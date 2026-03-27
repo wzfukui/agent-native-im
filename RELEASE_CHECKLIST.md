@@ -19,6 +19,7 @@
 - [ ] Verify friend request create/accept/remove flow for user-user and user-bot
 - [ ] Verify notification inbox create/read/read-all flow for user and owned bot contexts
 - [ ] Verify friend-request and notification WebSocket events reach active sessions
+- [ ] Verify inbox page, sidebar badge, and mobile badge stay synchronized after WS events
 - [ ] Verify direct chat rejects non-friend human targets
 - [ ] Verify direct chat succeeds for bot targets with `allow_non_friend_chat = true`
 - [ ] Verify `/friends/requests?direction=...&status=...` no longer returns 500
