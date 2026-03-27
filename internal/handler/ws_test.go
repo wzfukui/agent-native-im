@@ -266,6 +266,52 @@ func TestWebSocketPermanentKey(t *testing.T) {
 	conn.Close()
 }
 
+func TestBotDoesNotReceiveUnmentionedTwoMemberGroupMessage(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "two-member-group-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := botEntity["id"].(float64)
+	botKey, _ := botData["api_key"].(string)
+
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Two Member Group",
+		"conv_type":       "group",
+		"participant_ids": []float64{botID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+	botConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + botKey}})
+	if err != nil {
+		t.Fatalf("ws dial bot: %v", err)
+	}
+	defer botConn.Close()
+
+	skipEntityConfig(t, botConn)
+
+	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
+		"conversation_id": convID,
+		"content_type":    "text",
+		"layers":          map[string]string{"summary": "No mention in two-member group"},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+
+	botConn.SetReadDeadline(time.Now().Add(1 * time.Second))
+	var wsMsg map[string]interface{}
+	if err := botConn.ReadJSON(&wsMsg); err == nil {
+		t.Fatalf("bot should not receive unmentioned message in group chat, got %v", wsMsg["type"])
+	}
+}
+
 func TestWebSocketRevokeEvent(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

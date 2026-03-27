@@ -464,6 +464,10 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 
 	// Load participant subscription modes, entity types, and context windows
 	ctx := context.Background()
+	conv, err := h.store.GetConversation(ctx, msg.ConversationID)
+	if err != nil {
+		slog.Error("ws: failed to load conversation", "conversation_id", msg.ConversationID, "error", err)
+	}
 	participants, err := h.store.ListParticipants(ctx, msg.ConversationID)
 	if err != nil {
 		slog.Error("ws: failed to load participants", "conversation_id", msg.ConversationID, "error", err)
@@ -510,16 +514,16 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			continue
 		}
 
-		// Bots/services: in 1-on-1 conversations always deliver;
-		// in group conversations respect subscription mode.
-		isDM := len(participants) <= 2
+		// Bots/services: only direct conversations auto-deliver;
+		// groups/channels always respect subscription mode, even with 2 members.
+		isDirectConversation := conv != nil && conv.ConvType == model.ConvDirect
 		mode := subModes[client.entityID]
 		if mode == "" {
 			mode = model.SubMentionOnly
 		}
 
 		shouldDeliver := false
-		if isDM {
+		if isDirectConversation {
 			// Direct message: always deliver to the bot
 			shouldDeliver = true
 		} else {
