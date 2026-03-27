@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
@@ -387,6 +388,13 @@ func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (
 	return "", "", lastErr
 }
 
+func (s *Server) lockEntityRotation(entityID int64) func() {
+	lock, _ := s.RotationLocks.LoadOrStore(entityID, &sync.Mutex{})
+	mu := lock.(*sync.Mutex)
+	mu.Lock()
+	return mu.Unlock
+}
+
 // HandleEntitySelfCheck returns a lightweight readiness report for a bot.
 func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
 	target, entityID, ok := s.ensureOwnedEntity(c)
@@ -469,6 +477,9 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 	if !ok {
 		return
 	}
+
+	unlock := s.lockEntityRotation(entityID)
+	defer unlock()
 
 	ctx := c.Request.Context()
 
@@ -650,7 +661,7 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 	}
 	if req.AvatarURL != nil {
 		// Validate avatar URL
-		avatarURL := *req.AvatarURL
+		avatarURL := normalizeStoredAvatarURL(*req.AvatarURL)
 		if avatarURL != "" {
 			// Must be http(s) or data: URL, max 500 chars
 			if len(avatarURL) > 500 {

@@ -305,6 +305,24 @@ func TestRegenerateEntityTokenOwnership(t *testing.T) {
 	assertStatus(t, resp, http.StatusForbidden)
 }
 
+func TestUpdateEntityNormalizesStableAvatarRoutes(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "avatar-normalize-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	entityID := int(parseOK(t, resp)["entity"].(map[string]interface{})["id"].(float64))
+
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", entityID), ptr(token), map[string]interface{}{
+		"avatar_url": "/avatar-files/bot.png?v=1",
+	})
+	assertStatus(t, resp, http.StatusOK)
+	data := parseOK(t, resp)
+	if data["avatar_url"] != "/files/bot.png" {
+		t.Fatalf("expected normalized entity avatar_url=/files/bot.png, got %v", data["avatar_url"])
+	}
+}
+
 func TestWebhookOwnership(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

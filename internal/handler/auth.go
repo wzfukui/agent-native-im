@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -12,6 +13,28 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"golang.org/x/crypto/bcrypt"
 )
+
+func normalizeStoredAvatarURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	if strings.HasPrefix(value, "data:image/") || strings.HasPrefix(value, "http://") || strings.HasPrefix(value, "https://") {
+		return value
+	}
+	parsed, err := url.Parse(value)
+	if err != nil {
+		return value
+	}
+	path := strings.TrimSpace(parsed.Path)
+	if strings.HasPrefix(path, "/avatar-files/") {
+		return "/files/" + strings.TrimPrefix(path, "/avatar-files/")
+	}
+	if strings.HasPrefix(path, "/avatars/") {
+		return "/files/" + strings.TrimPrefix(path, "/avatars/")
+	}
+	return value
+}
 
 // validatePassword checks if a password meets security requirements
 func validatePassword(password string) error {
@@ -197,7 +220,7 @@ func (s *Server) HandleUpdateProfile(c *gin.Context) {
 		entity.DisplayName = *req.DisplayName
 	}
 	if req.AvatarURL != nil {
-		entity.AvatarURL = *req.AvatarURL
+		entity.AvatarURL = normalizeStoredAvatarURL(*req.AvatarURL)
 	}
 	if req.Email != nil {
 		email := strings.TrimSpace(*req.Email)

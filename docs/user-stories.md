@@ -1,10 +1,10 @@
 # Agent-Native IM Platform User Stories
 
-## Version 4.1 - UX Refinement & Agent Context
+## Version 4.2 - Stability, Session Recovery, and Delivery Reliability
 
 This document contains comprehensive user stories covering all platform capabilities, organized by user type and feature area.
 
-> **Changelog:** v4.1 (2026-03-13) added Section 8 — invite flow, conversation persistence, bot thinking animation, DM archive, attachment display, immediate file upload, send status, agent context injection, agent attachment processing, voice message optimistic rendering.
+> **Changelog:** v4.2 (2026-03-27) adds acceptance criteria for cookie-restored invite access, stable avatar delivery, safer build refresh detection, reduced context-card refetching, and hardened token rotation behavior.
 
 ---
 
@@ -1043,6 +1043,69 @@ await ctx.mention(
 | 1 | Optimistic voice message | Record and send voice message | Audio bubble appears immediately at 60% opacity |
 | 2 | Upload completes | Wait for upload to finish | Opacity transitions to 100%, real message ID assigned |
 | 3 | Upload fails | Record voice when server is down | "Failed" badge shown on the voice message |
+
+### 8.11 Cookie-Restored Invite Access
+
+#### Story: Accepting an Invite from a Reopened Browser Tab
+**As a** logged-in user reopening an invite link in a new tab
+**I want to** use my restored browser session without an extra login step
+**So that** the invite page loads reliably even when no tab-local token exists
+
+**Acceptance Criteria:**
+- [x] Session restore from the auth cookie succeeds when sessionStorage is empty
+- [x] Invite info loads correctly after cookie-based session restore
+- [x] The web client does not send a synthetic placeholder bearer token on invite API requests
+- [x] The invite title is visible after session restoration
+
+### 8.12 Stable Avatar Delivery After Updates
+
+#### Story: Seeing a Newly Updated Avatar Without Broken Images
+**As a** user changing an avatar
+**I want to** see the new avatar continue loading through the stable public avatar route
+**So that** a successful save is not followed by a `404`
+
+**Acceptance Criteria:**
+- [x] Avatar values are stored canonically as `/files/...` on the backend
+- [x] Public rendering still uses `/avatar-files/...`
+- [x] Legacy `/avatars/...` and `/avatar-files/...` values remain normalizable/resolvable
+- [x] Avatar delivery remains cacheable and stable after profile or bot updates
+
+### 8.13 Context Card Fetch Discipline
+
+#### Story: Viewing Conversation Context Without Refetch Loops
+**As a** user reading a conversation
+**I want to** see memory and roadmap summaries without repeated background fetches
+**So that** the interface remains responsive and backend load stays bounded
+
+**Acceptance Criteria:**
+- [x] The conversation context card fetches memories and tasks once per conversation/token pair
+- [x] Prompt-only rerenders do not trigger duplicate network fetches
+- [x] Cached context snapshots can still hydrate before the live fetch settles
+
+### 8.14 Safer Build Refresh Detection
+
+#### Story: Refreshing Only for Materially Newer Web Builds
+**As a** web user
+**I want to** see a refresh prompt only when the deployed build meaningfully changed
+**So that** I do not get stuck in a stale "newer build available" loop for same-commit rebuilds
+
+**Acceptance Criteria:**
+- [x] Build drift is detected when the app version or commit changes
+- [x] Build time differences alone do not force the stale-build warning
+- [x] Hard reload still unregisters service workers and clears caches before redirecting
+
+### 8.15 Hardened Token Rotation
+
+#### Story: Rotating a Bot Token Safely Under Repeated User Actions
+**As a** bot owner
+**I want to** rotate a bot token safely even if the action is triggered repeatedly
+**So that** only one current permanent key survives and conflict-prone behavior is reduced
+
+**Acceptance Criteria:**
+- [x] Token rotation remains owner-only
+- [x] Previous permanent keys are revoked after a successful rotation
+- [x] Rotation attempts are serialized per entity on the backend
+- [x] Regression coverage exists for repeated rotations and related bot update paths
 
 ---
 

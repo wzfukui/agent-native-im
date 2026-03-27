@@ -9,6 +9,8 @@
 - [ ] `go test ./...`
 - [ ] Run migration SQL in order (`migrations/*_up.sql`)
 - [ ] Smoke API: `GET /api/v1/ping` and auth flow
+- [ ] Verify profile and entity avatar updates normalize to stored `/files/...` values
+- [ ] Verify repeated bot token rotation remains owner-only and revokes prior keys
 
 ## Deploy
 - [ ] `go build -o agent-native-im ./cmd/server`
@@ -24,5 +26,7 @@
 - [ ] Check key endpoints:
   - [ ] `/api/v1/conversations/public/:publicId`
   - [ ] `/api/v1/entities/:id/diagnostics`
+  - [ ] `/api/v1/invite/:code`
+  - [ ] `/avatar-files/:filename`
 - [ ] Confirm browser WebSocket handshake returns `101 Switching Protocols` on `/api/v1/ws`
 - [ ] Rollback plan confirmed (last known good binary)

@@ -1,8 +1,8 @@
 # Agent-Native IM Platform Test Cases
 
-## Version 2.3 - Comprehensive Test Suite
+## Version 2.4 - Comprehensive Test Suite
 
-This document contains detailed test cases for all platform features, including recent improvements for message deduplication, accessibility, error handling, and task management.
+This document contains detailed test cases for all platform features, including recent improvements for session recovery, avatar delivery, build refresh behavior, context-card fetch discipline, and task management.
 
 ---
 
@@ -218,6 +218,107 @@ const testMessage = {
 ---
 
 ### TC-ERROR-002: Backward Compatibility with Legacy Errors
+
+---
+
+## 4. Stability Regression Tests
+
+### TC-STABILITY-001: Invite Page Works After Cookie Session Restore
+**Priority:** High
+**Component:** Web Session Restore, Invite Flow
+
+**Preconditions:**
+- User has a valid auth cookie
+- No tab-local `sessionStorage` token exists
+- Invite code is valid
+
+**Steps:**
+1. Open a fresh browser tab
+2. Navigate directly to `/join/<code>`
+3. Allow the app to restore the session through `GET /api/v1/me`
+4. Observe the invite page load
+5. Confirm the invite request is sent without a synthetic placeholder bearer token
+
+**Expected Result:**
+- Invite page renders normally
+- Conversation title appears
+- User is not forced back to login
+- Invite API request relies on cookie-backed auth, not `Bearer __cookie_session__`
+
+### TC-STABILITY-002: Avatar Update Does Not Regress to 404
+**Priority:** High
+**Component:** Profile Update, Avatar Delivery
+
+**Preconditions:**
+- Authenticated user or bot owner
+- Uploadable image file available
+
+**Steps:**
+1. Upload a new avatar through the web UI
+2. Save the updated profile or bot details
+3. Reload the page
+4. Open the avatar resource URL from the rendered image
+
+**Expected Result:**
+- Save succeeds
+- Avatar renders after reload
+- Avatar URL resolves through `/avatar-files/...`
+- No `404` is returned for the resulting avatar resource
+
+### TC-STABILITY-003: Same-Commit Rebuild Does Not Trigger False Stale Build Warning
+**Priority:** Medium
+**Component:** Build Drift Detection
+
+**Preconditions:**
+- Current web bundle version and commit match the deployed bundle
+- Build time differs between local and deployed metadata
+
+**Steps:**
+1. Load the app
+2. Fetch `build-info.json`
+3. Compare version, commit, and build time
+
+**Expected Result:**
+- No stale-build warning is shown when only build time differs
+- Warning still appears if version or commit differs
+
+### TC-STABILITY-004: Conversation Context Card Avoids Prompt-Only Refetches
+**Priority:** High
+**Component:** Conversation Context Card
+
+**Preconditions:**
+- Conversation contains memories and tasks
+- Context card is visible
+
+**Steps:**
+1. Open a conversation with the context card
+2. Let the initial card fetch complete
+3. Trigger a prompt-only rerender without changing the conversation identity
+4. Observe network activity
+
+**Expected Result:**
+- Initial memories/tasks fetch runs once
+- Prompt-only rerender does not trigger duplicate `listMemories` / `listTasks` calls
+- Existing context content stays visible
+
+### TC-STABILITY-005: Repeated Token Rotation Remains Safe
+**Priority:** High
+**Component:** Bot Token Rotation
+
+**Preconditions:**
+- Bot exists and belongs to the authenticated user
+
+**Steps:**
+1. Rotate the bot token once
+2. Confirm the new key works
+3. Rotate the token again
+4. Confirm the first rotated key no longer works
+5. Confirm the latest key still works
+
+**Expected Result:**
+- Rotation succeeds without spurious conflict failures
+- Previous permanent key is revoked
+- Latest key remains valid
 **Priority:** High
 **Component:** Error Parser
 

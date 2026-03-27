@@ -2,11 +2,34 @@ package postgres
 
 import (
 	"context"
+	"net/url"
 	"strings"
 	"time"
 
+	"github.com/uptrace/bun"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
+
+func avatarStoredNameFromURL(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	parsed, err := url.Parse(value)
+	if err == nil && parsed.Path != "" {
+		value = parsed.Path
+	}
+	switch {
+	case strings.HasPrefix(value, "/files/"):
+		return strings.TrimPrefix(value, "/files/")
+	case strings.HasPrefix(value, "/avatar-files/"):
+		return strings.TrimPrefix(value, "/avatar-files/")
+	case strings.HasPrefix(value, "/avatars/"):
+		return strings.TrimPrefix(value, "/avatars/")
+	default:
+		return ""
+	}
+}
 
 func (s *PGStore) CreateFileRecord(ctx context.Context, record *model.FileRecord) error {
 	_, err := s.DB.NewInsert().Model(record).Exec(ctx)
@@ -56,8 +79,8 @@ func (s *PGStore) ListReferencedAvatarStoredNames(ctx context.Context) ([]string
 
 	names := make([]string, 0, len(urls))
 	for _, url := range urls {
-		name := strings.TrimPrefix(strings.TrimSpace(url), "/files/")
-		if name != "" && name != url {
+		name := avatarStoredNameFromURL(url)
+		if name != "" {
 			names = append(names, name)
 		}
 	}
@@ -70,6 +93,11 @@ func (s *PGStore) IsAvatarStoredNameReferenced(ctx context.Context, storedName s
 	}
 	return s.DB.NewSelect().
 		Model((*model.Entity)(nil)).
-		Where("avatar_url = ?", "/files/"+storedName).
+		Where("avatar_url IN (?)", bun.In([]string{
+			"/files/" + storedName,
+			"/avatar-files/" + storedName,
+			"/avatar-files/" + storedName + "?v=1",
+			"/avatars/" + storedName,
+		})).
 		Exists(ctx)
 }

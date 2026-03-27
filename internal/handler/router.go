@@ -4,6 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -28,13 +29,14 @@ func (a *AuthHelper) GenerateToken(entityID int64, entityType model.EntityType) 
 }
 
 type Server struct {
-	Config    *config.Config
-	Store     store.Store
-	Hub       *ws.Hub
-	Webhook   *webhook.Deliverer
-	Auth      *AuthHelper
-	FileStore filestore.FileStore
-	Push      *push.Sender
+	Config        *config.Config
+	Store         store.Store
+	Hub           *ws.Hub
+	Webhook       *webhook.Deliverer
+	Auth          *AuthHelper
+	FileStore     filestore.FileStore
+	Push          *push.Sender
+	RotationLocks sync.Map
 }
 
 func NewRouter(s *Server) *gin.Engine {

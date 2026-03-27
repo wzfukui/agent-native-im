@@ -277,6 +277,29 @@ func TestUpdateProfile(t *testing.T) {
 	}
 }
 
+func TestUpdateProfileNormalizesStableAvatarRoutes(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "PUT", "/api/v1/me", ptr(token), map[string]string{
+		"avatar_url": "/avatar-files/profile.png?v=1",
+	})
+	assertStatus(t, resp, http.StatusOK)
+	data := parseOK(t, resp)
+	if data["avatar_url"] != "/files/profile.png" {
+		t.Fatalf("expected normalized avatar_url=/files/profile.png, got %v", data["avatar_url"])
+	}
+
+	resp = doJSON(t, "PUT", "/api/v1/me", ptr(token), map[string]string{
+		"avatar_url": "/avatars/profile.png",
+	})
+	assertStatus(t, resp, http.StatusOK)
+	data = parseOK(t, resp)
+	if data["avatar_url"] != "/files/profile.png" {
+		t.Fatalf("expected legacy /avatars route normalized to /files/profile.png, got %v", data["avatar_url"])
+	}
+}
+
 func TestUpdateProfileEmpty(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
