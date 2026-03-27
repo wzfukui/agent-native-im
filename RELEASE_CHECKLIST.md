@@ -8,7 +8,10 @@
 ## Quality gate
 - [ ] `go test ./...`
 - [ ] Run migration SQL in order (`migrations/*_up.sql`)
+- [ ] Confirm `000014_entity_public_id_bot_id.up.sql` applied successfully
 - [ ] Smoke API: `GET /api/v1/ping` and auth flow
+- [ ] Verify new bot creation rejects missing/invalid `bot_id`
+- [ ] Verify successful bot creation returns both `public_id` and `bot_id`
 - [ ] Verify profile and entity avatar updates normalize to stored `/files/...` values
 - [ ] Verify repeated bot token rotation remains owner-only and revokes prior keys
 

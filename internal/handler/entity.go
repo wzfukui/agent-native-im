@@ -9,11 +9,13 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/ws"
@@ -26,9 +28,23 @@ const (
 
 type createEntityRequest struct {
 	Name        string                 `json:"name" binding:"required"`
+	BotID       string                 `json:"bot_id"`
 	DisplayName string                 `json:"display_name"`
 	EntityType  string                 `json:"entity_type"` // defaults to "bot"
 	Metadata    map[string]interface{} `json:"metadata"`
+}
+
+var botIDPattern = regexp.MustCompile(`^bot_[a-z0-9][a-z0-9_-]{2,63}$`)
+
+func validateBotID(raw string) error {
+	botID := strings.TrimSpace(raw)
+	if botID == "" {
+		return fmt.Errorf("bot_id is required")
+	}
+	if !botIDPattern.MatchString(botID) {
+		return fmt.Errorf("bot_id must start with bot_ and contain only lowercase letters, numbers, underscores, or hyphens")
+	}
+	return nil
 }
 
 // generateKey creates a random API key with the given prefix.
@@ -64,9 +80,21 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		displayName = req.Name
 	}
 
+	entityName := strings.TrimSpace(req.Name)
+	botID := strings.TrimSpace(req.BotID)
+	if entityType == model.EntityBot {
+		if err := validateBotID(botID); err != nil {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationFormat, err.Error())
+			return
+		}
+		entityName = botID
+	}
+
 	entity := &model.Entity{
+		PublicID:    uuid.NewString(),
+		BotID:       botID,
 		EntityType:  entityType,
-		Name:        req.Name,
+		Name:        entityName,
 		DisplayName: displayName,
 		Status:      "active",
 		OwnerID:     &ownerID,
@@ -93,7 +121,7 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		FailFromDB(c, err, "failed to create entity")
 		return
 	}
-	s.attachEntityPublicID(c.Request.Context(), entity)
+	s.attachEntityIdentity(c.Request.Context(), entity)
 
 	// Always issue a permanent API key on creation (like Telegram/Discord/Slack).
 	returnedKey := generateKey(keyPrefixPermanent)
@@ -572,6 +600,7 @@ func (s *Server) HandleSearchEntities(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "search failed")
 		return
 	}
+	s.attachEntitiesIdentity(c.Request.Context(), entities)
 	if entities == nil {
 		entities = []*model.Entity{}
 	}
@@ -604,6 +633,7 @@ func (s *Server) HandleListEntities(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to list entities")
 		return
 	}
+	s.attachEntitiesIdentity(c.Request.Context(), entities)
 
 	type entityWithStatus struct {
 		*model.Entity

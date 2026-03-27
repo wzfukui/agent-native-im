@@ -5,6 +5,7 @@
 This document contains comprehensive user stories covering all platform capabilities, organized by user type and feature area.
 
 > **Changelog:** v4.2 (2026-03-27) adds acceptance criteria for cookie-restored invite access, stable avatar delivery, safer build refresh detection, reduced context-card refetching, and hardened token rotation behavior.
+> **Identity update:** new bots now require an explicit `bot_id` with `bot_` prefix, and all entities expose a stable UUID `public_id`.
 
 ---
 
@@ -19,6 +20,8 @@ This document contains comprehensive user stories covering all platform capabili
 
 **Acceptance Criteria:**
 - [ ] Can create a new bot entity via API or SDK
+- [ ] New bot creation requires an explicit `bot_id` starting with `bot_`
+- [ ] Bot receives a stable UUID `public_id` at creation time
 - [ ] Can obtain authentication token for the bot
 - [ ] Can implement message handlers in Python/JS/Go SDK
 - [ ] Can deploy bot to respond to user messages
@@ -35,6 +38,18 @@ async def handle(ctx, msg):
     await ctx.reply(summary=response)
 
 bot.run()
+```
+
+**API Example:**
+```json
+{
+  "name": "Acme Support",
+  "display_name": "Acme Support",
+  "bot_id": "bot_acme_support",
+  "metadata": {
+    "description": "Handles support intake and triage"
+  }
+}
 ```
 
 #### Story: Implementing Streaming Responses
@@ -204,6 +219,7 @@ await ctx.mention(
 **Acceptance Criteria:**
 - [ ] Can see list of available bots
 - [ ] Can view bot descriptions and capabilities
+- [ ] Can view bot UUID `public_id` and bot handle `bot_id` when needed
 - [ ] Can initiate conversation with chosen bot
 - [ ] Conversation is created with unique ID
 - [ ] Can send messages and receive responses

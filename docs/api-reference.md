@@ -129,20 +129,26 @@ Create a bot or service entity.
 - **Auth**: Required (user only)
 - **Request body**:
   ```json
-  { "name": "string", "display_name": "string (optional)", "entity_type": "bot|service (default: bot)", "metadata": {} }
+  {
+    "name": "string",
+    "display_name": "string (optional)",
+    "bot_id": "string (required for bots, must start with bot_)",
+    "entity_type": "bot|service (default: bot)",
+    "metadata": {}
+  }
   ```
 - **Response** `201`:
   ```json
-  { "entity": { ... }, "bootstrap_key": "aimb_...", "markdown_doc": "..." }
+  { "entity": { "id": 1, "public_id": "uuid", "bot_id": "bot_support_cn", ... }, "api_key": "aim_...", "markdown_doc": "..." }
   ```
-- **Errors**: `403`, `409`
+- **Errors**: `400 VALIDATION_FORMAT`, `403`, `409`
 
 ### GET /entities
 
 List entities owned by the authenticated user (with online status).
 
 - **Auth**: Required (user only)
-- **Response** `200`: Array of entity objects with `online` boolean
+- **Response** `200`: Array of entity objects with `online` boolean, `public_id`, and `bot_id` when present
 
 ### GET /entities/search?capability=...
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/wzfukui/agent-native-im/internal/model"
@@ -26,6 +27,7 @@ func (s *PGStore) SeedAdmin(ctx context.Context, username, password string) erro
 	}
 
 	entity := &model.Entity{
+		PublicID:    uuid.NewString(),
 		EntityType:  model.EntityUser,
 		Name:        username,
 		DisplayName: username,

@@ -23,6 +23,26 @@ func (s *PGStore) GetEntityByID(ctx context.Context, id int64) (*model.Entity, e
 	return entity, nil
 }
 
+func (s *PGStore) GetEntityByPublicID(ctx context.Context, publicID string) (*model.Entity, error) {
+	entity := new(model.Entity)
+	err := s.DB.NewSelect().Model(entity).Where("public_id = ?", publicID).Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
+func (s *PGStore) GetEntityByBotID(ctx context.Context, botID string) (*model.Entity, error) {
+	entity := new(model.Entity)
+	err := s.DB.NewSelect().Model(entity).
+		Where("lower(bot_id) = lower(?)", botID).
+		Scan(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return entity, nil
+}
+
 func (s *PGStore) GetEntitiesByIDs(ctx context.Context, ids []int64) ([]*model.Entity, error) {
 	if len(ids) == 0 {
 		return nil, nil

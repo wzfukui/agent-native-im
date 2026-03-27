@@ -51,6 +51,8 @@ curl http://localhost:9800/api/v1/health
 
 ### Entities (Bots & Users)
 - CRUD with soft-delete and reactivate
+- Stable external UUID `public_id` for every entity
+- Required `bot_id` handles (`bot_` prefix) for newly created bots
 - Approval workflow: bootstrap key -> WebSocket connect -> approve -> permanent key
 - Credentials: `aim_` permanent keys, `aimb_` bootstrap keys (prefix + SHA-256 hash)
 - Self-check endpoint, connection diagnostics, token regeneration

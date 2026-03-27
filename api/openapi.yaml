@@ -64,6 +64,11 @@ components:
         id:
           type: integer
           format: int64
+        public_id:
+          type: string
+          format: uuid
+        bot_id:
+          type: string
         owner_id:
           type: integer
           format: int64
@@ -233,12 +238,19 @@ paths:
           application/json:
             schema:
               type: object
-              required: [name]
+              required: [name, bot_id]
               properties:
                 name:
                   type: string
+                display_name:
+                  type: string
+                bot_id:
+                  type: string
+                  pattern: ^bot_[a-z0-9][a-z0-9_-]{2,63}$
             example:
-              name: Pi-mono
+              name: Acme Support
+              display_name: Acme Support
+              bot_id: bot_acme_support
       responses:
         '201':
           description: Bot created. Token is shown only once.
@@ -248,7 +260,9 @@ paths:
                 ok: true
                 data:
                   id: 1
-                  name: Pi-mono
+                  public_id: d290f1ee-6c54-4b01-90e6-d701748f0851
+                  bot_id: bot_acme_support
+                  name: bot_acme_support
                   token: 7fac230f-e9cb-4a02-825b-070ae57c9ae1
 
     get:

@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
+	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +46,9 @@ func TestMain(m *testing.M) {
 		log.Fatalf("failed to connect to test db: %v", err)
 	}
 	defer testStore.Close()
+	if err := applyTestMigration(testStore, "000014_entity_public_id_bot_id.up.sql"); err != nil {
+		log.Fatalf("failed to apply test migration: %v", err)
+	}
 
 	testHub = ws.NewHub(testStore)
 	go testHub.Run()
@@ -71,6 +77,35 @@ func TestMain(m *testing.M) {
 	testRouter = handler.NewRouter(testServer)
 
 	os.Exit(m.Run())
+}
+
+func applyTestMigration(store *postgres.PGStore, filename string) error {
+	candidates := []string{
+		filepath.Join("migrations", filename),
+		filepath.Join("..", "..", "migrations", filename),
+	}
+	var sqlBytes []byte
+	var err error
+	for _, candidate := range candidates {
+		sqlBytes, err = os.ReadFile(candidate)
+		if err == nil {
+			_, err = store.DB.Exec(string(sqlBytes))
+			return err
+		}
+	}
+	return fmt.Errorf("read migration %s: %w", filename, err)
+}
+
+var nonBotIDChars = regexp.MustCompile(`[^a-z0-9]+`)
+
+func testBotIDFromName(name string) string {
+	slug := strings.ToLower(strings.TrimSpace(name))
+	slug = nonBotIDChars.ReplaceAllString(slug, "_")
+	slug = strings.Trim(slug, "_")
+	if slug == "" {
+		slug = "entity"
+	}
+	return "bot_" + slug
 }
 
 // truncateAll clears all tables in dependency order.
@@ -118,6 +153,30 @@ func doJSON(t *testing.T, method, path string, token *string, body interface{}) 
 	t.Helper()
 	var bodyReader io.Reader
 	if body != nil {
+		if method == http.MethodPost && path == "/api/v1/entities" {
+			switch typed := body.(type) {
+			case map[string]string:
+				if typed["bot_id"] == "" && typed["name"] != "" {
+					cloned := map[string]string{}
+					for k, v := range typed {
+						cloned[k] = v
+					}
+					cloned["bot_id"] = testBotIDFromName(typed["name"])
+					body = cloned
+				}
+			case map[string]interface{}:
+				if _, exists := typed["bot_id"]; !exists {
+					if name, ok := typed["name"].(string); ok && name != "" {
+						cloned := map[string]interface{}{}
+						for k, v := range typed {
+							cloned[k] = v
+						}
+						cloned["bot_id"] = testBotIDFromName(name)
+						body = cloned
+					}
+				}
+			}
+		}
 		b, err := json.Marshal(body)
 		if err != nil {
 			t.Fatalf("marshal body: %v", err)

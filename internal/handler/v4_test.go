@@ -34,8 +34,11 @@ func TestSearchEntitiesByCapabilitySkills(t *testing.T) {
 		t.Fatalf("expected at least 1 entity for code_review, got %v", result["data"])
 	}
 	e0 := entities[0].(map[string]interface{})
-	if e0["name"] != "skill-bot" {
-		t.Fatalf("expected name=skill-bot, got %v", e0["name"])
+	if e0["bot_id"] != "bot_skill_bot" {
+		t.Fatalf("expected bot_id=bot_skill_bot, got %v", e0["bot_id"])
+	}
+	if e0["display_name"] != "skill-bot" {
+		t.Fatalf("expected display_name=skill-bot, got %v", e0["display_name"])
 	}
 	// Should include online field
 	if _, exists := e0["online"]; !exists {

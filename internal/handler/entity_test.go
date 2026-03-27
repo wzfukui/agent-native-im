@@ -1,12 +1,14 @@
 package handler_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
 	gorillaWs "github.com/gorilla/websocket"
 )
 
@@ -54,10 +56,51 @@ func TestCreateBot(t *testing.T) {
 	if entity["entity_type"] != "bot" {
 		t.Fatalf("expected entity_type=bot, got %v", entity["entity_type"])
 	}
+	if entity["name"] != "bot_test_agent" {
+		t.Fatalf("expected persisted bot name=bot_test_agent, got %v", entity["name"])
+	}
+	if entity["bot_id"] != "bot_test_agent" {
+		t.Fatalf("expected bot_id=bot_test_agent, got %v", entity["bot_id"])
+	}
+	publicID, _ := entity["public_id"].(string)
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid public_id UUID, got %q", publicID)
+	}
 
 	// Permanent key should immediately have full API access
 	resp = doJSON(t, "GET", "/api/v1/conversations", ptr(apiKey), nil)
 	assertStatus(t, resp, http.StatusOK)
+}
+
+func TestCreateBotRequiresExplicitBotID(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	reqBody := map[string]string{
+		"name": "missing-bot-id",
+	}
+	b, err := json.Marshal(reqBody)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/entities", strings.NewReader(string(b)))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	w := httptest.NewRecorder()
+	testRouter.ServeHTTP(w, req)
+	assertStatus(t, w, http.StatusBadRequest)
+}
+
+func TestCreateBotRejectsInvalidBotIDFormat(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{
+		"name":   "bad-bot",
+		"bot_id": "supportbot",
+	})
+	assertStatus(t, resp, http.StatusBadRequest)
 }
 
 func TestCreatedKeyHasFullAccess(t *testing.T) {

@@ -53,6 +53,8 @@ type PushStore interface {
 type EntityStore interface {
 	CreateEntity(ctx context.Context, entity *model.Entity) error
 	GetEntityByID(ctx context.Context, id int64) (*model.Entity, error)
+	GetEntityByPublicID(ctx context.Context, publicID string) (*model.Entity, error)
+	GetEntityByBotID(ctx context.Context, botID string) (*model.Entity, error)
 	GetEntitiesByIDs(ctx context.Context, ids []int64) ([]*model.Entity, error)
 	GetEntityByName(ctx context.Context, name string, entityType model.EntityType) (*model.Entity, error)
 	GetEntityByEmail(ctx context.Context, email string) (*model.Entity, error)

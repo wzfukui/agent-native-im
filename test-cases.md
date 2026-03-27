@@ -2,11 +2,66 @@
 
 ## Version 2.4 - Comprehensive Test Suite
 
-This document contains detailed test cases for all platform features, including recent improvements for session recovery, avatar delivery, build refresh behavior, context-card fetch discipline, and task management.
+This document contains detailed test cases for all platform features, including recent improvements for session recovery, avatar delivery, build refresh behavior, context-card fetch discipline, task management, and entity identity (`public_id` / `bot_id`) enforcement.
 
 ---
 
-## 1. Message Deduplication Tests
+## 1. Entity Identity Tests
+
+### TC-IDENTITY-001: Bot Creation Requires Explicit Bot ID
+**Priority:** High
+**Component:** Entity API, Bot Creation UI
+
+**Preconditions:**
+- Authenticated user session
+
+**Steps:**
+1. Submit bot creation request without `bot_id`
+2. Submit bot creation request with invalid `bot_id` like `support_bot`
+3. Submit bot creation request with valid `bot_id` like `bot_support_cn`
+
+**Expected Result:**
+- Missing `bot_id` is rejected with `400`
+- Invalid `bot_id` format is rejected with `400`
+- Valid request succeeds with `201`
+
+### TC-IDENTITY-002: Entity Public UUID Is Stable And Present
+**Priority:** High
+**Component:** Entity API
+
+**Preconditions:**
+- User or bot entity exists
+
+**Steps:**
+1. Create a new user or bot
+2. Read entity via `/me`, `/entities`, or create response
+3. Store returned `public_id`
+4. Read the same entity again
+
+**Expected Result:**
+- `public_id` is a valid UUID
+- `public_id` remains unchanged across reads
+- Legacy metadata-backed rows are backfilled into the first-class identity field
+
+### TC-IDENTITY-003: Bot Handle Is Exposed Separately From Display Name
+**Priority:** Medium
+**Component:** Entity API, Bot Detail UI
+
+**Preconditions:**
+- Bot created with `display_name = "Acme Support"` and `bot_id = "bot_acme_support"`
+
+**Steps:**
+1. View bot detail page
+2. Inspect API response for the same bot
+
+**Expected Result:**
+- Display name remains human-readable
+- `bot_id` is shown as a technical handle
+- Internal numeric `id` remains available for transition compatibility
+
+---
+
+## 2. Message Deduplication Tests
 
 ### TC-DEDUP-001: Prevent Duplicate Messages on Reconnection
 **Priority:** High

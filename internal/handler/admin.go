@@ -23,6 +23,7 @@ func (s *Server) HandleAdminListUsers(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to list entities")
 		return
 	}
+	s.attachEntitiesIdentity(c.Request.Context(), entities)
 
 	type entityWithOnline struct {
 		*model.Entity
