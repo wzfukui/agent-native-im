@@ -130,3 +130,43 @@ func TestDirectConversationRequiresFriendshipUnlessBotOptIn(t *testing.T) {
 	})
 	assertStatus(t, resp, http.StatusCreated)
 }
+
+func TestDiscoverableEntitySearchRequiresExactMatch(t *testing.T) {
+	truncateAll(t)
+	adminToken := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(adminToken), map[string]string{
+		"name":   "support helper",
+		"bot_id": "bot_support_helper",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	entity := parseOK(t, resp)["entity"].(map[string]interface{})
+	botID := int(entity["id"].(float64))
+	publicID := entity["public_id"].(string)
+
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/entities/%d", botID), ptr(adminToken), map[string]interface{}{
+		"discoverability": "platform_public",
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	resp = doJSON(t, "GET", "/api/v1/entities/discover?q=bot_support&limit=20", ptr(adminToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	results := parseResponse(t, resp)["data"].([]interface{})
+	if len(results) != 0 {
+		t.Fatalf("expected partial bot_id search to return 0 results, got %d", len(results))
+	}
+
+	resp = doJSON(t, "GET", "/api/v1/entities/discover?q=bot_support_helper&limit=20", ptr(adminToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	results = parseResponse(t, resp)["data"].([]interface{})
+	if len(results) != 1 {
+		t.Fatalf("expected exact bot_id search to return 1 result, got %d", len(results))
+	}
+
+	resp = doJSON(t, "GET", "/api/v1/entities/discover?q="+publicID+"&limit=20", ptr(adminToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	results = parseResponse(t, resp)["data"].([]interface{})
+	if len(results) != 1 {
+		t.Fatalf("expected exact public_id search to return 1 result, got %d", len(results))
+	}
+}

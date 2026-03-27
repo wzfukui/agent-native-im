@@ -79,6 +79,10 @@ func (s *Server) canStartDirectConversation(c *gin.Context, initiator *model.Ent
 // GET /entities/discover?q=...
 func (s *Server) HandleSearchDiscoverableEntities(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
+	if query == "" {
+		Fail(c, http.StatusBadRequest, "query parameter 'q' is required")
+		return
+	}
 	limit := 20
 	if raw := strings.TrimSpace(c.Query("limit")); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 && parsed <= 100 {

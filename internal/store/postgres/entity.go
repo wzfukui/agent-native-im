@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/uptrace/bun"
@@ -136,13 +137,13 @@ func (s *PGStore) SearchDiscoverableEntities(ctx context.Context, query string, 
 		q = q.Where("id != ?", excludeEntityID)
 	}
 	if query != "" {
-		like := "%" + query + "%"
+		needle := strings.ToLower(strings.TrimSpace(query))
 		q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
 			return sq.
-				Where("display_name ILIKE ?", like).
-				WhereOr("name ILIKE ?", like).
-				WhereOr("bot_id ILIKE ?", like).
-				WhereOr("public_id::text ILIKE ?", like)
+				Where("LOWER(display_name) = ?", needle).
+				WhereOr("LOWER(name) = ?", needle).
+				WhereOr("LOWER(bot_id) = ?", needle).
+				WhereOr("LOWER(public_id::text) = ?", needle)
 		})
 	}
 	q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
