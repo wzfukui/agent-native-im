@@ -115,13 +115,14 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	serverURL := s.Config.ServerURL // fallback
 	if origin := c.GetHeader("Origin"); origin != "" {
 		serverURL = origin
-	} else if fwdProto := c.GetHeader("X-Forwarded-Proto"); fwdProto != "" {
+	} else if (serverURL == "" || serverURL == "http://localhost:9800") && c.GetHeader("X-Forwarded-Proto") != "" {
+		fwdProto := c.GetHeader("X-Forwarded-Proto")
 		host := c.GetHeader("X-Forwarded-Host")
 		if host == "" {
 			host = c.Request.Host
 		}
 		serverURL = fwdProto + "://" + host
-	} else if c.Request.Host != "" && serverURL == "http://localhost:9800" {
+	} else if c.Request.Host != "" && (serverURL == "" || serverURL == "http://localhost:9800") {
 		scheme := "http"
 		if c.Request.TLS != nil {
 			scheme = "https"
