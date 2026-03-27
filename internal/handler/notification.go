@@ -59,6 +59,20 @@ func notificationConversationID(notification *model.Notification) int64 {
 	}
 }
 
+func notificationConversationPublicID(notification *model.Notification) string {
+	if notification == nil || len(notification.Data) == 0 {
+		return ""
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(notification.Data, &payload); err != nil {
+		return ""
+	}
+	if raw, ok := payload["conversation_public_id"].(string); ok {
+		return strings.TrimSpace(raw)
+	}
+	return ""
+}
+
 func notificationPushPath(notification *model.Notification) string {
 	if notification == nil {
 		return "/inbox"
@@ -66,6 +80,9 @@ func notificationPushPath(notification *model.Notification) string {
 	switch notification.Kind {
 	case "friend.request.received", "friend.request.accepted", "friend.request.rejected", "friend.request.canceled":
 		return "/friends"
+	}
+	if publicID := notificationConversationPublicID(notification); publicID != "" {
+		return "/chat/public/" + url.PathEscape(publicID)
 	}
 	if convID := notificationConversationID(notification); convID > 0 {
 		return "/chat/" + strconv.FormatInt(convID, 10)
