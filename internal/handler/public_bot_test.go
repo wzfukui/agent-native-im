@@ -63,4 +63,19 @@ func TestPublicBotAccessLinkSession(t *testing.T) {
 
 	resp = doJSON(t, "GET", fmt.Sprintf("/api/v1/conversations/%d/messages", convID), ptr(visitorToken), nil)
 	assertStatus(t, resp, http.StatusOK)
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(ownerToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	notifications := parseResponse(t, resp)["data"].([]interface{})
+	found := false
+	for _, item := range notifications {
+		notification := item.(map[string]interface{})
+		if notification["kind"] == "public.bot_session_created" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected public.bot_session_created notification for bot owner")
+	}
 }

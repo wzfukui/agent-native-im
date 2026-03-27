@@ -147,6 +147,25 @@ This document contains detailed test cases for all platform features, including 
 - Member receives `conversation.change_approved` or `conversation.change_rejected`
 - Inbox items carry enough conversation context to open the relevant chat directly
 
+### TC-INBOX-003: Task Handover And Public Bot Session Notifications
+**Priority:** High
+**Component:** Message API, Public Bot API, Inbox UI
+
+**Preconditions:**
+- A group conversation exists with at least one assignee
+- A bot is configured for public sessions
+
+**Steps:**
+1. Send a `task_handover` message with `assign_to`
+2. Open the assignee inbox
+3. Create a public bot visitor session
+4. Open the bot owner's inbox
+
+**Expected Result:**
+- Assignee receives `task.handover`
+- Bot owner receives `public.bot_session_created`
+- Both notifications can open the relevant conversation directly
+
 ### TC-BOT-ACCESS-001: Direct User Chat Requires Friendship
 **Priority:** High
 **Component:** Conversation API

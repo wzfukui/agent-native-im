@@ -257,6 +257,8 @@ await ctx.mention(
 - [ ] Incoming friend requests can be accepted or rejected directly from the inbox
 - [ ] Invite joins notify conversation admins/owners in the inbox
 - [ ] Conversation change requests and resolutions appear in the inbox for relevant actors
+- [ ] Task handovers appear in the assignee inbox with a direct path back to the conversation
+- [ ] Public bot visitor sessions notify the bot owner in the inbox
 - [ ] Accepted requests appear in the friends graph after refresh
 - [ ] Sidebar and mobile badges are derived from the same inbox state as the inbox page
 - [ ] Active sessions receive `notification.*` and `friend.request.*` events over WebSocket

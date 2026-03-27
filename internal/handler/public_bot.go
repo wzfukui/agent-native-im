@@ -287,6 +287,29 @@ func (s *Server) HandleCreatePublicBotSession(c *gin.Context) {
 		_ = s.Store.IncrementBotAccessLinkUseCount(c.Request.Context(), link.ID)
 		link.UsedCount++
 	}
+	if bot.OwnerID != nil {
+		visitorName := getEntityDisplayName(visitor)
+		_, _ = s.createNotificationForRecipient(
+			c.Request.Context(),
+			*bot.OwnerID,
+			nil,
+			"public.bot_session_created",
+			"Public bot session created",
+			visitorName+" started a public session with "+getEntityDisplayName(bot),
+			map[string]any{
+				"bot_entity_id":          bot.ID,
+				"bot_public_id":          bot.PublicID,
+				"bot_bot_id":             bot.BotID,
+				"conversation_id":        conv.ID,
+				"conversation_public_id": conversationPublicID(conv),
+				"conversation_title":     conv.Title,
+				"visitor_entity_id":      visitor.ID,
+				"visitor_public_id":      visitor.PublicID,
+				"visitor_display_name":   visitorName,
+				"access_code":            strings.TrimSpace(req.AccessCode),
+			},
+		)
+	}
 	OK(c, http.StatusCreated, gin.H{
 		"token":        token,
 		"visitor":      visitor,

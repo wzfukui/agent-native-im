@@ -1079,6 +1079,8 @@ Current inbox notification kinds include:
 - `conversation.change_request`
 - `conversation.change_approved`
 - `conversation.change_rejected`
+- `task.handover`
+- `public.bot_session_created`
 | `ping` | Heartbeat | Respond with `pong` |
 
 ---

@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -608,5 +609,48 @@ func (s *Server) processTaskHandover(ctx context.Context, msg *model.Message) {
 		for _, entityID := range assignees {
 			s.Hub.SendToEntity(entityID, event)
 		}
+	}
+
+	if len(data.AssignTo) == 0 {
+		return
+	}
+
+	conv, _ := s.Store.GetConversation(ctx, msg.ConversationID)
+	sender, _ := s.Store.GetEntityByID(ctx, msg.SenderID)
+	convTitle := "Conversation"
+	if conv != nil && strings.TrimSpace(conv.Title) != "" {
+		convTitle = conv.Title
+	}
+	senderPublicID := ""
+	if sender != nil {
+		senderPublicID = sender.PublicID
+	}
+	assignees := data.AssignTo
+	if len(assignees) > 50 {
+		assignees = assignees[:50]
+	}
+	for _, entityID := range assignees {
+		if entityID == msg.SenderID {
+			continue
+		}
+		_, _ = s.createNotificationForRecipient(
+			ctx,
+			entityID,
+			&msg.SenderID,
+			"task.handover",
+			"Task handover received",
+			getEntityDisplayName(sender)+" handed over work in "+convTitle,
+			map[string]any{
+				"conversation_id":        msg.ConversationID,
+				"conversation_title":     convTitle,
+				"conversation_public_id": conversationPublicID(conv),
+				"message_id":             msg.ID,
+				"sender_id":              msg.SenderID,
+				"sender_public_id":       senderPublicID,
+				"sender_display_name":    getEntityDisplayName(sender),
+				"handover_type":          data.HandoverType,
+				"task_id":                data.TaskID,
+			},
+		)
 	}
 }

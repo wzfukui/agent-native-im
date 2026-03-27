@@ -246,6 +246,56 @@ func TestTaskHandoverWithoutTaskID(t *testing.T) {
 	}
 }
 
+func TestTaskHandoverCreatesNotificationForAssignee(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
+		"username": "handover-target",
+		"password": "Member123",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	targetData := parseOK(t, resp)
+	targetID := int(targetData["id"].(float64))
+	targetToken := login(t, "handover-target", "Member123")
+
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Handover Notify",
+		"conv_type":       "group",
+		"participant_ids": []float64{float64(targetID)},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convID := int(parseOK(t, resp)["id"].(float64))
+
+	resp = doJSON(t, "POST", "/api/v1/messages/send", ptr(token), map[string]interface{}{
+		"conversation_id": convID,
+		"content_type":    "task_handover",
+		"layers": map[string]interface{}{
+			"summary": "Please take over",
+			"data": map[string]interface{}{
+				"handover_type": "review_request",
+				"assign_to":     []float64{float64(targetID)},
+			},
+		},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(targetToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	notifications := parseResponse(t, resp)["data"].([]interface{})
+	found := false
+	for _, item := range notifications {
+		notification := item.(map[string]interface{})
+		if notification["kind"] == "task.handover" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected task.handover notification for assignee")
+	}
+}
+
 func TestTaskHandoverWrongConversation(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
