@@ -507,6 +507,9 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 		return
 	}
 
+	requesterID := auth.GetEntityID(c)
+	slog.Info("starting token regeneration", "entity_id", entityID, "owner_id", requesterID)
+
 	unlock := s.lockEntityRotation(entityID)
 	defer unlock()
 
@@ -515,7 +518,7 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 	// Create new credential FIRST, so entity always has at least one valid key.
 	permanentKey, keyHash, err := s.issuePermanentCredential(ctx, entityID)
 	if err != nil {
-		slog.Error("failed to regenerate permanent credential", "entity_id", entityID, "error", err)
+		slog.Error("failed to regenerate permanent credential", "entity_id", entityID, "owner_id", requesterID, "error", err)
 		Fail(c, http.StatusInternalServerError, "failed to create permanent credential")
 		return
 	}
@@ -534,6 +537,8 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 	if s.Hub != nil {
 		disconnected = s.Hub.DisconnectEntity(entityID)
 	}
+
+	slog.Info("token regeneration completed", "entity_id", entityID, "owner_id", requesterID, "disconnected", disconnected)
 
 	OK(c, http.StatusOK, gin.H{
 		"message":      "token regenerated",
