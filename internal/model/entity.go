@@ -26,6 +26,7 @@ type Entity struct {
 	AvatarURL   string          `bun:"avatar_url,notnull" json:"avatar_url,omitempty"`
 	Status      string          `bun:"status,notnull,default:'active'" json:"status"`
 	Metadata    json.RawMessage `bun:"metadata,type:jsonb,notnull,default:'{}'" json:"metadata,omitempty"`
+	PublicID    string          `bun:"-" json:"public_id,omitempty"`
 	OwnerID     *int64          `bun:"owner_id" json:"owner_id,omitempty"`
 	CreatedAt   time.Time       `bun:"created_at,nullzero,notnull,default:now()" json:"created_at"`
 	UpdatedAt   time.Time       `bun:"updated_at,nullzero,notnull,default:now()" json:"updated_at"`

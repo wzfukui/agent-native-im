@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 )
@@ -46,6 +47,10 @@ func TestMeWithJWT(t *testing.T) {
 	entity, ok := data["name"]
 	if !ok || entity != "testadmin" {
 		t.Fatalf("expected name=testadmin, got %v", entity)
+	}
+	publicID, _ := data["public_id"].(string)
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid public_id UUID, got %q", publicID)
 	}
 }
 
@@ -107,6 +112,10 @@ func TestCreateUser(t *testing.T) {
 	if data["name"] != "newuser" {
 		t.Fatalf("expected name=newuser, got %v", data["name"])
 	}
+	publicID, _ := data["public_id"].(string)
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid public_id UUID, got %q", publicID)
+	}
 
 	// New user should be able to login
 	resp = doJSON(t, "POST", "/api/v1/auth/login", nil, map[string]string{
@@ -114,6 +123,27 @@ func TestCreateUser(t *testing.T) {
 		"password": "Userpass123",
 	})
 	assertStatus(t, resp, http.StatusOK)
+}
+
+func TestRegisterReturnsPublicID(t *testing.T) {
+	truncateAll(t)
+
+	resp := doJSON(t, "POST", "/api/v1/auth/register", nil, map[string]string{
+		"username":     "publicid-user",
+		"password":     "Publicid1",
+		"display_name": "Public ID User",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+
+	data := parseOK(t, resp)
+	entity, ok := data["entity"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected entity payload, got %T", data["entity"])
+	}
+	publicID, _ := entity["public_id"].(string)
+	if _, err := uuid.Parse(publicID); err != nil {
+		t.Fatalf("expected valid public_id UUID, got %q", publicID)
+	}
 }
 
 func TestCreateUserShortPassword(t *testing.T) {

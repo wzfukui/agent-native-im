@@ -1,11 +1,13 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"golang.org/x/crypto/bcrypt"
@@ -110,6 +112,7 @@ func (s *Server) HandleLogin(c *gin.Context) {
 	}
 
 	auth.SetAuthCookie(c, token)
+	s.attachEntityPublicID(ctx, entity)
 
 	OK(c, http.StatusOK, gin.H{
 		"token":  token,
@@ -125,6 +128,7 @@ func (s *Server) HandleMe(c *gin.Context) {
 		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
 		return
 	}
+	s.attachEntityPublicID(c.Request.Context(), entity)
 	OK(c, http.StatusOK, entity)
 }
 
@@ -211,6 +215,7 @@ func (s *Server) HandleUpdateProfile(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to update profile")
 		return
 	}
+	s.attachEntityPublicID(ctx, entity)
 
 	OK(c, http.StatusOK, entity)
 }
@@ -310,6 +315,7 @@ func (s *Server) HandleCreateUser(c *gin.Context) {
 		Name:        req.Username,
 		DisplayName: displayName,
 		Status:      "active",
+		Metadata:    mustJSONMetadata(map[string]any{entityPublicIDKey: uuid.NewString()}),
 	}
 
 	if err := s.Store.CreateEntity(ctx, entity); err != nil {
@@ -334,6 +340,7 @@ func (s *Server) HandleCreateUser(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to create credential")
 		return
 	}
+	s.attachEntityPublicID(ctx, entity)
 
 	OK(c, http.StatusCreated, entity)
 }
@@ -387,6 +394,7 @@ func (s *Server) HandleRegister(c *gin.Context) {
 		Email:       email,
 		DisplayName: displayName,
 		Status:      "active",
+		Metadata:    mustJSONMetadata(map[string]any{entityPublicIDKey: uuid.NewString()}),
 	}
 
 	if err := s.Store.CreateEntity(ctx, entity); err != nil {
@@ -420,9 +428,18 @@ func (s *Server) HandleRegister(c *gin.Context) {
 	}
 
 	auth.SetAuthCookie(c, token)
+	s.attachEntityPublicID(ctx, entity)
 
 	OK(c, http.StatusCreated, gin.H{
 		"token":  token,
 		"entity": entity,
 	})
+}
+
+func mustJSONMetadata(meta map[string]any) []byte {
+	encoded, err := json.Marshal(meta)
+	if err != nil {
+		return nil
+	}
+	return encoded
 }

@@ -92,6 +92,7 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 		FailFromDB(c, err, "failed to create entity")
 		return
 	}
+	s.attachEntityPublicID(c.Request.Context(), entity)
 
 	// Always issue a permanent API key on creation (like Telegram/Discord/Slack).
 	returnedKey := generateKey(keyPrefixPermanent)
@@ -362,19 +363,28 @@ func (s *Server) ensureOwnedEntity(c *gin.Context) (*model.Entity, int64, bool) 
 }
 
 func (s *Server) issuePermanentCredential(ctx context.Context, entityID int64) (string, string, error) {
-	permanentKey := generateKey(keyPrefixPermanent)
-	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(permanentKey)))
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		permanentKey := generateKey(keyPrefixPermanent)
+		keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(permanentKey)))
 
-	cred := &model.Credential{
-		EntityID:   entityID,
-		CredType:   model.CredAPIKey,
-		SecretHash: keyHash,
-		RawPrefix:  permanentKey[:8],
+		cred := &model.Credential{
+			EntityID:   entityID,
+			CredType:   model.CredAPIKey,
+			SecretHash: keyHash,
+			RawPrefix:  permanentKey[:8],
+		}
+		if err := s.Store.CreateCredential(ctx, cred); err != nil {
+			lastErr = err
+			if isUniqueConstraintError(err) {
+				slog.Warn("credential collision during token regeneration", "entity_id", entityID, "attempt", attempt+1, "error", err)
+				continue
+			}
+			return "", "", err
+		}
+		return permanentKey, keyHash, nil
 	}
-	if err := s.Store.CreateCredential(ctx, cred); err != nil {
-		return "", "", err
-	}
-	return permanentKey, keyHash, nil
+	return "", "", lastErr
 }
 
 // HandleEntitySelfCheck returns a lightweight readiness report for a bot.
@@ -465,6 +475,7 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 	// Create new credential FIRST, so entity always has at least one valid key.
 	permanentKey, keyHash, err := s.issuePermanentCredential(ctx, entityID)
 	if err != nil {
+		slog.Error("failed to regenerate permanent credential", "entity_id", entityID, "error", err)
 		Fail(c, http.StatusInternalServerError, "failed to create permanent credential")
 		return
 	}

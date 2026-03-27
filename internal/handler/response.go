@@ -48,7 +48,7 @@ func FailWithDetails(c *gin.Context, status int, code string, msg string, detail
 // It detects unique constraint violations (23505) and returns 409 Conflict.
 func FailFromDB(c *gin.Context, err error, fallbackMsg string) {
 	errStr := err.Error()
-	if strings.Contains(errStr, "23505") || strings.Contains(errStr, "unique constraint") || strings.Contains(errStr, "duplicate key") {
+	if isUniqueConstraintError(err) {
 		// Extract constraint name if possible
 		details := map[string]any{"db_error_hint": "duplicate key value violates unique constraint"}
 		if idx := strings.Index(errStr, "\""); idx >= 0 {
@@ -62,6 +62,14 @@ func FailFromDB(c *gin.Context, err error, fallbackMsg string) {
 	// Log full error server-side, return generic message to client
 	slog.Error("DB error", "method", c.Request.Method, "path", c.Request.URL.Path, "error", err)
 	FailWithCode(c, 500, ErrCodeDBError, fallbackMsg)
+}
+
+func isUniqueConstraintError(err error) bool {
+	if err == nil {
+		return false
+	}
+	errStr := err.Error()
+	return strings.Contains(errStr, "23505") || strings.Contains(errStr, "unique constraint") || strings.Contains(errStr, "duplicate key")
 }
 
 func sendError(c *gin.Context, status int, code string, msg string, details map[string]any) {
