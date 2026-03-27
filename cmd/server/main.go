@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -57,11 +58,17 @@ func main() {
 			if msg.Layers.Summary != "" {
 				body = msg.Layers.Summary
 			}
+			path := "/chat/" + fmt.Sprint(msg.ConversationID)
+			if conv, err := st.GetConversation(context.Background(), msg.ConversationID); err == nil {
+				if publicID := conversationPublicID(conv); publicID != "" {
+					path = "/chat/public/" + publicID
+				}
+			}
 			pushSender.SendToEntity(context.Background(), entityID, push.Payload{
 				Title:          senderName,
 				Body:           body,
 				Kind:           "message.new",
-				Path:           "/chat/" + fmt.Sprint(msg.ConversationID),
+				Path:           path,
 				ConversationID: msg.ConversationID,
 				MessageID:      msg.ID,
 			})
@@ -157,4 +164,16 @@ func main() {
 
 	// Close database connection (deferred st.Close() will also run)
 	slog.Info("shutdown complete")
+}
+
+func conversationPublicID(conv *model.Conversation) string {
+	if conv == nil || len(conv.Metadata) == 0 {
+		return ""
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(conv.Metadata, &meta); err != nil {
+		return ""
+	}
+	raw, _ := meta["public_id"].(string)
+	return raw
 }
