@@ -167,10 +167,7 @@ AGENT_IM_ENTITY_ID=%d
 ## Quick Start (OpenClaw Plugin)
 
 `+"```bash"+`
-git clone https://github.com/wzfukui/openclaw.git
-cd openclaw
-git checkout main
-pnpm install
+openclaw plugin install ani-openclaw-plugin
 
 # Trust and enable the ANI plugin
 openclaw config set plugins.allow '["ani"]' --strict-json
@@ -189,6 +186,15 @@ openclaw config set tools.allow '["group:web"]' --strict-json
 
 # Start the gateway
 openclaw gateway run
+`+"```"+`
+
+### Source Install (fallback)
+
+`+"```bash"+`
+git clone https://github.com/wzfukui/openclaw.git
+cd openclaw
+git checkout main
+pnpm install
 `+"```"+`
 `,
 		entity.DisplayName,

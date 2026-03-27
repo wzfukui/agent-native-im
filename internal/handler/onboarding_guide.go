@@ -54,10 +54,7 @@ If you are using OpenClaw, **do not start by wiring a custom Python echo bot**. 
 ## Quick Start (OpenClaw)
 
 `+"```bash"+`
-git clone https://github.com/wzfukui/openclaw.git
-cd openclaw
-git checkout main
-pnpm install
+openclaw plugin install ani-openclaw-plugin
 
 # Trust and enable the ANI plugin
 openclaw config set plugins.allow '["ani"]' --strict-json
@@ -76,6 +73,15 @@ openclaw config set tools.allow '["group:web"]' --strict-json
 
 # Start the gateway
 openclaw gateway run
+`+"```"+`
+
+## Source Install (fallback)
+
+`+"```bash"+`
+git clone https://github.com/wzfukui/openclaw.git
+cd openclaw
+git checkout main
+pnpm install
 `+"```"+`
 
 ## Verify The Connection
