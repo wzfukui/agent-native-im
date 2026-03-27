@@ -22,6 +22,7 @@ type Store interface {
 	InviteStore
 	FriendStore
 	BotAccessStore
+	NotificationStore
 	TaskStore
 	MemoryStore
 	ChangeRequestStore
@@ -88,6 +89,13 @@ type BotAccessStore interface {
 	ListBotAccessLinks(ctx context.Context, botEntityID int64) ([]*model.BotAccessLink, error)
 	IncrementBotAccessLinkUseCount(ctx context.Context, id int64) error
 	DeleteBotAccessLink(ctx context.Context, id int64) error
+}
+
+type NotificationStore interface {
+	CreateNotification(ctx context.Context, notification *model.Notification) error
+	ListNotificationsByEntity(ctx context.Context, entityID int64, status string, limit int) ([]*model.Notification, error)
+	MarkNotificationRead(ctx context.Context, entityID, notificationID int64) (*model.Notification, error)
+	MarkAllNotificationsRead(ctx context.Context, entityID int64) error
 }
 
 type CredentialStore interface {

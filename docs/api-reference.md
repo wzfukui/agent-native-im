@@ -254,6 +254,33 @@ Delete an existing friendship between the acting entity and the target entity.
 - **Query**:
   - `entity_id` optional when acting as an owned bot
 
+### GET /notifications
+
+List inbox notifications for the current entity or an owned bot.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional when acting as an owned bot
+  - `status`: `unread|read` optional
+  - `limit`: optional, defaults to `50`, max `200`
+- **Response** `200`: Array of notification objects with `recipient_entity` and `actor_entity`
+
+### POST /notifications/:id/read
+
+Mark a single notification as read.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional when acting as an owned bot
+
+### POST /notifications/read-all
+
+Mark every notification for the acting entity as read.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional when acting as an owned bot
+
 ## Public Bot Access
 
 ### POST /bots/:id/access-links
@@ -1036,6 +1063,11 @@ Streaming messages (not persisted until `stream_end`):
 | `connection.approved` | Bootstrap key upgraded | `{ api_key, message }` |
 | `task.updated` | Task created/updated/deleted | `{ action, task }` |
 | `task.handover` | Task handover notification | `{ message_id, conversation_id, ... }` |
+| `friend.request.created` | Friend request created | Friend request object |
+| `friend.request.updated` | Friend request status changed | Friend request object |
+| `notification.new` | Inbox notification created | Notification object |
+| `notification.read` | Inbox notification marked read | Notification object |
+| `notification.read_all` | All inbox notifications marked read | `{ entity_id }` |
 | `ping` | Heartbeat | Respond with `pong` |
 
 ---

@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
+	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
 func orderedFriendEntityPair(entityA, entityB int64) (int64, int64) {
@@ -16,6 +18,25 @@ func orderedFriendEntityPair(entityA, entityB int64) (int64, int64) {
 		return entityA, entityB
 	}
 	return entityB, entityA
+}
+
+func entityDisplayName(entity *model.Entity) string {
+	if entity == nil {
+		return "Someone"
+	}
+	if strings.TrimSpace(entity.DisplayName) != "" {
+		return entity.DisplayName
+	}
+	if strings.TrimSpace(entity.Name) != "" {
+		return entity.Name
+	}
+	if strings.TrimSpace(entity.BotID) != "" {
+		return entity.BotID
+	}
+	if strings.TrimSpace(entity.PublicID) != "" {
+		return entity.PublicID
+	}
+	return "Someone"
 }
 
 func (s *Server) resolveActingEntity(c *gin.Context, requestedID int64) (*model.Entity, bool) {
@@ -196,6 +217,9 @@ func (s *Server) HandleCreateFriendRequest(c *gin.Context) {
 			Fail(c, http.StatusInternalServerError, "failed to create friendship")
 			return
 		}
+		s.attachEntityIdentity(c.Request.Context(), source)
+		s.attachEntityIdentity(c.Request.Context(), target)
+		_ = s.broadcastFriendRequestUpdate(c, reverse, "accepted")
 		OK(c, http.StatusCreated, gin.H{"auto_accepted": true, "friendship": friendship, "request": reverse})
 		return
 	}
@@ -214,7 +238,112 @@ func (s *Server) HandleCreateFriendRequest(c *gin.Context) {
 	friendReq.TargetEntity = target
 	s.attachEntityIdentity(c.Request.Context(), source)
 	s.attachEntityIdentity(c.Request.Context(), target)
+	_ = s.broadcastFriendRequestCreated(c, friendReq)
 	OK(c, http.StatusCreated, friendReq)
+}
+
+func (s *Server) emitFriendRequestEvent(entityID int64, eventType string, friendReq *model.FriendRequest) {
+	if friendReq == nil {
+		return
+	}
+	s.Hub.SendToEntity(entityID, ws.WSMessage{
+		Type: eventType,
+		Data: friendReq,
+	})
+}
+
+func (s *Server) broadcastFriendRequestCreated(c *gin.Context, friendReq *model.FriendRequest) error {
+	if friendReq == nil {
+		return nil
+	}
+	actorID := friendReq.SourceEntityID
+	if _, err := s.createNotification(
+		c,
+		friendReq.TargetEntityID,
+		&actorID,
+		"friend.request.received",
+		"New friend request",
+		fmt.Sprintf("%s sent a friend request", entityDisplayName(friendReq.SourceEntity)),
+		map[string]any{
+			"request_id":        friendReq.ID,
+			"source_entity_id":  friendReq.SourceEntityID,
+			"target_entity_id":  friendReq.TargetEntityID,
+			"status":            friendReq.Status,
+			"source_public_id":  friendReq.SourceEntity.PublicID,
+			"target_public_id":  friendReq.TargetEntity.PublicID,
+			"source_display_name": entityDisplayName(friendReq.SourceEntity),
+			"target_display_name": entityDisplayName(friendReq.TargetEntity),
+		},
+	); err != nil {
+		return err
+	}
+	s.emitFriendRequestEvent(friendReq.SourceEntityID, "friend.request.created", friendReq)
+	s.emitFriendRequestEvent(friendReq.TargetEntityID, "friend.request.created", friendReq)
+	return nil
+}
+
+func (s *Server) broadcastFriendRequestUpdate(c *gin.Context, friendReq *model.FriendRequest, action string) error {
+	if friendReq == nil {
+		return nil
+	}
+	if friendReq.SourceEntity == nil {
+		friendReq.SourceEntity, _ = s.Store.GetEntityByID(c.Request.Context(), friendReq.SourceEntityID)
+	}
+	if friendReq.TargetEntity == nil {
+		friendReq.TargetEntity, _ = s.Store.GetEntityByID(c.Request.Context(), friendReq.TargetEntityID)
+	}
+	s.attachEntityIdentity(c.Request.Context(), friendReq.SourceEntity)
+	s.attachEntityIdentity(c.Request.Context(), friendReq.TargetEntity)
+
+	var title string
+	var body string
+	switch action {
+	case "accepted":
+		title = "Friend request accepted"
+		body = fmt.Sprintf("%s accepted your friend request", entityDisplayName(friendReq.TargetEntity))
+	case "rejected":
+		title = "Friend request declined"
+		body = fmt.Sprintf("%s declined your friend request", entityDisplayName(friendReq.TargetEntity))
+	case "canceled":
+		title = "Friend request canceled"
+		body = fmt.Sprintf("%s canceled a friend request", entityDisplayName(friendReq.SourceEntity))
+	default:
+		title = "Friend request updated"
+		body = "A friend request changed status"
+	}
+
+	var actorID *int64
+	if friendReq.ResolvedBy != nil {
+		actorID = friendReq.ResolvedBy
+	}
+	recipientID := friendReq.SourceEntityID
+	if action == "canceled" {
+		recipientID = friendReq.TargetEntityID
+	}
+	if _, err := s.createNotification(
+		c,
+		recipientID,
+		actorID,
+		"friend.request."+action,
+		title,
+		body,
+		map[string]any{
+			"request_id":         friendReq.ID,
+			"source_entity_id":   friendReq.SourceEntityID,
+			"target_entity_id":   friendReq.TargetEntityID,
+			"status":             friendReq.Status,
+			"resolved_by":        friendReq.ResolvedBy,
+			"source_public_id":   friendReq.SourceEntity.PublicID,
+			"target_public_id":   friendReq.TargetEntity.PublicID,
+			"source_display_name": entityDisplayName(friendReq.SourceEntity),
+			"target_display_name": entityDisplayName(friendReq.TargetEntity),
+		},
+	); err != nil {
+		return err
+	}
+	s.emitFriendRequestEvent(friendReq.SourceEntityID, "friend.request.updated", friendReq)
+	s.emitFriendRequestEvent(friendReq.TargetEntityID, "friend.request.updated", friendReq)
+	return nil
 }
 
 func (s *Server) resolveFriendRequestTarget(c *gin.Context) (*model.FriendRequest, *model.Entity, bool) {
@@ -262,6 +391,9 @@ func (s *Server) HandleAcceptFriendRequest(c *gin.Context) {
 		Fail(c, http.StatusInternalServerError, "failed to create friendship")
 		return
 	}
+	s.attachEntityIdentity(c.Request.Context(), friendReq.SourceEntity)
+	s.attachEntityIdentity(c.Request.Context(), friendReq.TargetEntity)
+	_ = s.broadcastFriendRequestUpdate(c, friendReq, "accepted")
 	OK(c, http.StatusOK, gin.H{"request": friendReq, "friendship": friendship})
 }
 
@@ -288,6 +420,8 @@ func (s *Server) updateFriendRequestStatus(c *gin.Context, expectedEntityID int6
 		Fail(c, http.StatusInternalServerError, message)
 		return
 	}
+	action := string(status)
+	_ = s.broadcastFriendRequestUpdate(c, friendReq, action)
 	OK(c, http.StatusOK, friendReq)
 }
 

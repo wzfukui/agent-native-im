@@ -104,6 +104,26 @@ This document contains detailed test cases for all platform features, including 
 - Friendship is recorded for Bot X, not the owning user
 - Bot X friend list returns the target entity
 
+### TC-FRIEND-003: Inbox Notification Lifecycle For Friend Requests
+**Priority:** High
+**Component:** Notification API, Inbox UI
+
+**Preconditions:**
+- Two active user accounts exist
+
+**Steps:**
+1. User A sends a friend request to User B
+2. User B loads `/notifications?status=unread`
+3. User B accepts the request
+4. User A loads `/notifications?status=unread`
+5. User A marks the notification as read
+
+**Expected Result:**
+- User B receives `friend.request.received`
+- User A receives `friend.request.accepted`
+- Marking read updates `status` and `read_at`
+- Both sides appear in `/friends`
+
 ### TC-BOT-ACCESS-001: Direct User Chat Requires Friendship
 **Priority:** High
 **Component:** Conversation API

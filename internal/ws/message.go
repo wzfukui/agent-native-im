@@ -25,6 +25,11 @@ type WSMessage struct {
 //   stream.cancel    - stream cancellation (forwarded from another client)
 //   task.cancel      - task cancellation broadcast
 //   task.cancelled   - cancellation confirmation to sender
+//   friend.request.created - friend request created or received
+//   friend.request.updated - friend request status changed
+//   notification.new - inbox item created
+//   notification.read - inbox item marked read
+//   notification.read_all - all inbox items marked read
 //   pong             - keepalive response
 //   error            - error notification
 

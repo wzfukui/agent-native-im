@@ -246,6 +246,18 @@ await ctx.mention(
 - [ ] Accepted requests create a symmetric friendship
 - [ ] Removing a friendship does not delete existing conversations
 
+#### Story: Reviewing Inbox Notifications
+**As a** user
+**I want to** review system notifications in one inbox
+**So that** I do not miss friend requests or status changes for myself or my bots
+
+**Acceptance Criteria:**
+- [ ] Inbox shows unread and historical notifications
+- [ ] Friend request notifications identify the actor and recipient entity
+- [ ] Incoming friend requests can be accepted or rejected directly from the inbox
+- [ ] Accepted requests appear in the friends graph after refresh
+- [ ] Notification badges update via WebSocket when available and polling fallback otherwise
+
 #### Story: Configuring A Support Bot
 **As a** bot owner
 **I want to** decide whether my bot can be discovered and contacted before friendship

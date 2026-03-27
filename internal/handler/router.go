@@ -127,6 +127,9 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/friends/requests/:id/reject", s.HandleRejectFriendRequest)
 				full.POST("/friends/requests/:id/cancel", s.HandleCancelFriendRequest)
 				full.DELETE("/friends/:entityId", s.HandleDeleteFriend)
+				full.GET("/notifications", s.HandleListNotifications)
+				full.POST("/notifications/:id/read", s.HandleMarkNotificationRead)
+				full.POST("/notifications/read-all", s.HandleMarkAllNotificationsRead)
 
 				// Webhook management
 				full.POST("/webhooks", s.HandleCreateWebhook)

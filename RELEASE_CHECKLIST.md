@@ -11,11 +11,14 @@
 - [ ] Confirm `000014_entity_public_id_bot_id.up.sql` applied successfully
 - [ ] Confirm `000015_friendships_and_bot_access.up.sql` applied successfully
 - [ ] Confirm `000016_bot_public_access.up.sql` applied successfully
+- [ ] Confirm `000017_notifications.up.sql` applied successfully
 - [ ] Smoke API: `GET /api/v1/ping` and auth flow
 - [ ] Verify new bot creation rejects missing/invalid `bot_id`
 - [ ] Verify successful bot creation returns both `public_id` and `bot_id`
 - [ ] Verify `/api/v1/entities/discover` returns active users and excludes private bots
 - [ ] Verify friend request create/accept/remove flow for user-user and user-bot
+- [ ] Verify notification inbox create/read/read-all flow for user and owned bot contexts
+- [ ] Verify friend-request and notification WebSocket events reach active sessions
 - [ ] Verify direct chat rejects non-friend human targets
 - [ ] Verify direct chat succeeds for bot targets with `allow_non_friend_chat = true`
 - [ ] Verify `/friends/requests?direction=...&status=...` no longer returns 500

@@ -38,6 +38,16 @@ func TestFriendRequestLifecycle(t *testing.T) {
 		t.Fatalf("expected 1 incoming request, got %d", len(incoming))
 	}
 
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(userBToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	userBNotifications := parseResponse(t, resp)["data"].([]interface{})
+	if len(userBNotifications) != 1 {
+		t.Fatalf("expected 1 unread notification for recipient, got %d", len(userBNotifications))
+	}
+	if kind := userBNotifications[0].(map[string]interface{})["kind"]; kind != "friend.request.received" {
+		t.Fatalf("expected friend.request.received notification, got %v", kind)
+	}
+
 	resp = doJSON(t, "GET", "/api/v1/friends/requests?direction=outgoing&status=pending", ptr(userAToken), nil)
 	assertStatus(t, resp, http.StatusOK)
 	outgoing := parseResponse(t, resp)["data"].([]interface{})
@@ -47,6 +57,16 @@ func TestFriendRequestLifecycle(t *testing.T) {
 
 	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/friends/requests/%d/accept", reqID), ptr(userBToken), nil)
 	assertStatus(t, resp, http.StatusOK)
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(userAToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	userANotifications := parseResponse(t, resp)["data"].([]interface{})
+	if len(userANotifications) != 1 {
+		t.Fatalf("expected 1 unread notification for requester, got %d", len(userANotifications))
+	}
+	if kind := userANotifications[0].(map[string]interface{})["kind"]; kind != "friend.request.accepted" {
+		t.Fatalf("expected friend.request.accepted notification, got %v", kind)
+	}
 
 	resp = doJSON(t, "GET", "/api/v1/friends", ptr(userAToken), nil)
 	assertStatus(t, resp, http.StatusOK)
