@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/wzfukui/agent-native-im/internal/model"
+	"github.com/wzfukui/agent-native-im/internal/push"
 	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
@@ -32,6 +34,77 @@ func (s *Server) attachNotificationIdentity(ctx context.Context, notification *m
 	}
 	s.attachEntityIdentity(ctx, notification.RecipientEntity)
 	s.attachEntityIdentity(ctx, notification.ActorEntity)
+}
+
+func notificationConversationID(notification *model.Notification) int64 {
+	if notification == nil || len(notification.Data) == 0 {
+		return 0
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(notification.Data, &payload); err != nil {
+		return 0
+	}
+	switch raw := payload["conversation_id"].(type) {
+	case float64:
+		return int64(raw)
+	case int64:
+		return raw
+	case int:
+		return int64(raw)
+	case string:
+		id, _ := strconv.ParseInt(strings.TrimSpace(raw), 10, 64)
+		return id
+	default:
+		return 0
+	}
+}
+
+func notificationPushPath(notification *model.Notification) string {
+	if notification == nil {
+		return "/inbox"
+	}
+	switch notification.Kind {
+	case "friend.request.received", "friend.request.accepted", "friend.request.rejected", "friend.request.canceled":
+		return "/friends"
+	}
+	if convID := notificationConversationID(notification); convID > 0 {
+		return "/chat/" + strconv.FormatInt(convID, 10)
+	}
+	return "/inbox?scope=" + url.QueryEscape(strconv.FormatInt(notification.RecipientEntityID, 10))
+}
+
+func (s *Server) pushNotification(ctx context.Context, notification *model.Notification) {
+	if s.Push == nil || notification == nil {
+		return
+	}
+	recipient := notification.RecipientEntity
+	if recipient == nil {
+		recipient, _ = s.Store.GetEntityByID(ctx, notification.RecipientEntityID)
+	}
+	if recipient == nil {
+		return
+	}
+	targetEntityID := recipient.ID
+	if recipient.EntityType != model.EntityUser {
+		if recipient.OwnerID == nil || *recipient.OwnerID == 0 {
+			return
+		}
+		targetEntityID = *recipient.OwnerID
+	}
+	title := strings.TrimSpace(notification.Title)
+	if title == "" {
+		title = "Agent-Native IM"
+	}
+	body := strings.TrimSpace(notification.Body)
+	if body == "" {
+		body = title
+	}
+	s.Push.SendToEntity(ctx, targetEntityID, push.Payload{
+		Title: title,
+		Body:  body,
+		Kind:  notification.Kind,
+		Path:  notificationPushPath(notification),
+	})
 }
 
 func (s *Server) createNotification(c *gin.Context, recipientID int64, actorID *int64, kind, title, body string, payload map[string]any) (*model.Notification, error) {
@@ -60,6 +133,7 @@ func (s *Server) createNotification(c *gin.Context, recipientID int64, actorID *
 		Type: "notification.new",
 		Data: notification,
 	})
+	s.pushNotification(c.Request.Context(), notification)
 	return notification, nil
 }
 
@@ -89,6 +163,7 @@ func (s *Server) createNotificationForRecipient(ctx context.Context, recipientID
 		Type: "notification.new",
 		Data: notification,
 	})
+	s.pushNotification(ctx, notification)
 	return notification, nil
 }
 

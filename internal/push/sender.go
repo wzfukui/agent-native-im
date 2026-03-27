@@ -29,6 +29,8 @@ func NewSender(st store.Store, cfg *config.Config) *Sender {
 type Payload struct {
 	Title          string `json:"title"`
 	Body           string `json:"body"`
+	Kind           string `json:"kind,omitempty"`
+	Path           string `json:"path,omitempty"`
 	ConversationID int64  `json:"conversation_id"`
 	MessageID      int64  `json:"message_id"`
 }

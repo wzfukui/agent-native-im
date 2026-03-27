@@ -24,6 +24,7 @@
 - [ ] Verify `conversation.change_request` and resolution notifications reach the correct inbox recipients
 - [ ] Verify `task.handover` reaches assigned entities in the inbox
 - [ ] Verify `public.bot_session_created` reaches the bot owner inbox after visitor session creation
+- [ ] Verify inbox notifications also produce browser push alerts when VAPID is configured
 - [ ] Verify direct chat rejects non-friend human targets
 - [ ] Verify direct chat succeeds for bot targets with `allow_non_friend_chat = true`
 - [ ] Verify `/friends/requests?direction=...&status=...` no longer returns 500

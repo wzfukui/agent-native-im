@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -59,6 +60,8 @@ func main() {
 			pushSender.SendToEntity(context.Background(), entityID, push.Payload{
 				Title:          senderName,
 				Body:           body,
+				Kind:           "message.new",
+				Path:           "/chat/" + fmt.Sprint(msg.ConversationID),
 				ConversationID: msg.ConversationID,
 				MessageID:      msg.ID,
 			})

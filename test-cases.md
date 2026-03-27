@@ -166,6 +166,25 @@ This document contains detailed test cases for all platform features, including 
 - Bot owner receives `public.bot_session_created`
 - Both notifications can open the relevant conversation directly
 
+### TC-INBOX-004: Browser Push Delivery For Inbox Notifications
+**Priority:** Medium
+**Component:** Push API, Service Worker, Inbox UI
+
+**Preconditions:**
+- VAPID keys are configured
+- User has granted browser notification permission
+
+**Steps:**
+1. Enable push notifications in settings
+2. Trigger a friend request for the user
+3. Trigger a conversation-scoped inbox notification such as a change request
+4. Click each browser notification
+
+**Expected Result:**
+- Friend-request push opens `/friends`
+- Conversation-scoped push opens the target `/chat/:id`
+- Other system pushes fall back to `/inbox`
+
 ### TC-BOT-ACCESS-001: Direct User Chat Requires Friendship
 **Priority:** High
 **Component:** Conversation API
