@@ -31,75 +31,59 @@ func (s *Server) HandleOnboardingGuide(c *gin.Context) {
 	}
 	wsURL := strings.Replace(strings.Replace(serverURL, "https://", "wss://", 1), "http://", "ws://", 1)
 
-	guide := fmt.Sprintf(`# Agent-Native IM — AI Bot 自主接入指南
+	guide := fmt.Sprintf(`# Agent-Native IM — OpenClaw Onboarding Guide
 
-> 本文档面向 AI Bot（如 Claude、GPT、NanoClaw 等），帮助你自主完成平台接入。
-> 端点地址: %s/api/v1
+> This guide is the default onboarding path for ANI bots.
+> Target endpoint: %s/api/v1
 
-## 快速上手
+## Recommended Path
 
-创建 Bot → 获得 API Key（aim_ 前缀）→ 开始编码。就这么简单。
+Create a Bot in ANI Web → get a permanent API key (`+"`aim_`"+` prefix) → connect it through the ANI OpenClaw channel plugin.
 
-## 前置条件
+If you are using OpenClaw, **do not start by wiring a custom Python echo bot**. The supported default path is the OpenClaw channel plugin.
 
-你需要以下信息（由创建你的人类用户提供）：
+## Required Values
 
-| 项目 | 说明 | 示例 |
+| Field | Description | Example |
 |------|------|------|
-| API_KEY | 永久 API 密钥（aim_ 前缀） | aim_a1b2c3... |
-| API_BASE | API 基础地址 | %s/api/v1 |
-| WS_URL | WebSocket 地址 | %s/api/v1/ws |
+| API_KEY | Permanent ANI API key | aim_a1b2c3... |
+| API_BASE | ANI REST base URL | %s/api/v1 |
+| WS_URL | ANI WebSocket endpoint | %s/api/v1/ws |
 
-## 第一步：安装 Python SDK
-
-SDK 源码托管在 GitHub，尚未发布到 PyPI，请通过以下方式安装：
+## Quick Start (OpenClaw)
 
 `+"```bash"+`
-# 方式一：直接从 GitHub 安装（推荐）
-pip install git+https://github.com/wzfukui/agent-native-im-sdk-python.git
+git clone https://github.com/wzfukui/openclaw.git
+cd openclaw
+git checkout main
+pnpm install
 
-# 方式二：克隆后本地安装
-git clone https://github.com/wzfukui/agent-native-im-sdk-python.git
-cd agent-native-im-sdk-python
-pip install -e .
+# Trust and enable the ANI plugin
+openclaw config set plugins.allow '["ani"]' --strict-json
+openclaw config set plugins.entries.ani.enabled true
+
+# Configure ANI
+openclaw config set channels.ani.serverUrl "%s"
+openclaw config set channels.ani.apiKey "你的API_KEY"
+
+# Minimum ANI tool access
+openclaw config set tools.profile messaging
+openclaw config set tools.alsoAllow '["ani_send_file","ani_fetch_chat_history_messages","ani_list_conversation_tasks","ani_get_task","ani_create_task","ani_update_task","ani_delete_task"]' --strict-json
+
+# Optional: enable public web search/fetch
+openclaw config set tools.allow '["group:web"]' --strict-json
+
+# Start the gateway
+openclaw gateway run
 `+"```"+`
 
-## 第二步：编写最小可运行 Bot
-
-创建 `+"`bot.py`"+` 文件：
-
-`+"```python"+`
-from agent_im_python import Bot
-
-bot = Bot(
-    token="你的API_KEY",
-    base_url="%s",
-)
-
-@bot.on_message
-async def handle(ctx, msg):
-    text = msg.layers.summary or ""
-    await ctx.reply(summary=f"收到: {text}")
-
-bot.run()
-`+"```"+`
-
-运行: `+"`python bot.py`"+`
-
-> ⚠️ **这只是连通性测试用的 echo bot！**
-> 如果你是已有 LLM 能力的 AI Bot（如 OpenClaw、NanoClaw、Dify 等），
-> **请把 ANI 作为消息通道（channel）接入你现有的对话管线**，
-> 而不是直接使用上面的 echo 示例。具体做法见下方「LLM 集成」章节。
-> 简单来说：在 `+"`@bot.on_message`"+` 中调用你的 LLM，把回复发回来即可。
-
-## 第三步：验证连接状态
+## Verify The Connection
 
 `+"```bash"+`
-# 使用你的密钥验证
-curl %s/api/v1/me -H "Authorization: Bearer 你的密钥"
+curl %s/api/v1/me -H "Authorization: Bearer 你的API_KEY"
 `+"```"+`
 
-返回结果应包含你的 entity 信息（id, name, status 等）。
+The response should include the ANI entity metadata for your bot.
 
 ## 消息格式
 
@@ -175,13 +159,12 @@ await ctx.reply(
 )
 `+"```"+`
 
-## LLM 集成（重要 — 正式接入必读）
+## LLM Integration
 
-**ANI 的核心价值是作为消息通道，连接人类与你的 AI 能力。**
-你需要在 `+"`@bot.on_message`"+` 中调用你的 LLM（OpenAI / Claude / Qwen 等），
-把 AI 的回复通过 ANI 发回给用户。不要只做 echo bot！
+**ANI is the message channel. OpenClaw remains your agent runtime.**
+Your agent should keep using its existing LLM stack (OpenAI / Claude / Qwen / local models), and the ANI plugin should carry messages into and out of that runtime.
 
-如果你基于 LLM（如 OpenAI、Claude），可以获取输出格式指南注入 system prompt：
+If you need the ANI output-format guide for your system prompt:
 
 `+"```bash"+`
 curl %s/api/v1/skill-template?format=text
@@ -212,7 +195,7 @@ async def handle(ctx, msg):
 bot.run()
 `+"```"+`
 
-## 部署
+## Deployment
 
 ### systemd（推荐用于服务器）
 
@@ -235,16 +218,6 @@ Environment=AGENT_IM_BASE=%s
 WantedBy=multi-user.target
 `+"```"+`
 
-### Docker
-
-`+"```dockerfile"+`
-FROM python:3.11-slim
-WORKDIR /app
-RUN pip install git+https://github.com/wzfukui/agent-native-im-sdk-python.git
-COPY bot.py .
-CMD ["python", "bot.py"]
-`+"```"+`
-
 ## 自检清单
 
 接入完成后，逐项确认：
@@ -256,7 +229,7 @@ CMD ["python", "bot.py"]
 - [ ] 能成功回复消息
 - [ ] 流式响应（如果使用）前端正常显示
 
-## 故障排查
+## Troubleshooting
 
 | 问题 | 可能原因 | 解决方案 |
 |------|----------|----------|

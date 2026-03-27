@@ -36,11 +36,17 @@ func TestCreateBot(t *testing.T) {
 	if !strings.Contains(markdownDoc, apiKey) {
 		t.Fatal("markdown_doc should contain the API key")
 	}
-	if !strings.Contains(markdownDoc, "Bot 接入凭据") {
-		t.Fatal("markdown_doc should contain onboarding credentials")
+	if !strings.Contains(markdownDoc, "OpenClaw Access Pack") {
+		t.Fatal("markdown_doc should default to the OpenClaw access pack")
 	}
 	if strings.Contains(markdownDoc, "Bootstrap") {
 		t.Fatal("markdown_doc should not mention Bootstrap")
+	}
+	if strings.Contains(markdownDoc, "agent-native-im-sdk-python") {
+		t.Fatal("markdown_doc should not direct OpenClaw users to the Python SDK")
+	}
+	if !strings.Contains(markdownDoc, "git clone https://github.com/wzfukui/openclaw.git") {
+		t.Fatal("markdown_doc should contain the OpenClaw install path")
 	}
 
 	// Entity should exist

@@ -134,9 +134,9 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	keyNote := `- **此密钥为永久密钥（aim_ 前缀），可直接调用所有 API**
 - 请妥善保管，创建后不再展示`
 
-	markdownDoc := fmt.Sprintf(`# Bot 接入凭据 — %s
+	markdownDoc := fmt.Sprintf(`# OpenClaw Access Pack — %s
 
-## 连接凭据
+## Connection Credentials
 
 | 项目 | 值 |
 |------|---|
@@ -145,15 +145,16 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 | `+keyLabel+` | `+"`%s`"+` |
 | Entity ID | `+"`%d`"+` |
 
-## ⚠️ 重要提醒
+## Important
 
 `+keyNote+`
-- 详细接入流程、SDK 安装、消息格式、流式协议等，请阅读完整接入指南：
+- This access pack is intended for the ANI OpenClaw channel plugin.
+- Do not wire this token into the Python SDK quickstart. The recommended path is OpenClaw channel mode.
 
-**完整接入指南：** %s/api/v1/onboarding-guide
-**LLM 输出格式指南：** %s/api/v1/skill-template?format=text
+**OpenClaw onboarding guide:** %s/api/v1/onboarding-guide
+**LLM output format guide:** %s/api/v1/skill-template?format=text
 
-## 环境变量
+## Environment Variables
 
 `+"```bash"+`
 AGENT_IM_BASE=%s/api/v1
@@ -162,31 +163,39 @@ AGENT_IM_WS=%s/api/v1/ws
 AGENT_IM_ENTITY_ID=%d
 `+"```"+`
 
-## 快速开始（Python SDK）
+## Quick Start (OpenClaw Plugin)
 
 `+"```bash"+`
-pip install git+https://github.com/wzfukui/agent-native-im-sdk-python.git
-`+"```"+`
+git clone https://github.com/wzfukui/openclaw.git
+cd openclaw
+git checkout main
+pnpm install
 
-`+"```python"+`
-from agent_im_python import Bot
+# Trust and enable the ANI plugin
+openclaw config set plugins.allow '["ani"]' --strict-json
+openclaw config set plugins.entries.ani.enabled true
 
-bot = Bot(token="%s", base_url="%s")
+# Configure ANI channel
+openclaw config set channels.ani.serverUrl "%s"
+openclaw config set channels.ani.apiKey "%s"
 
-@bot.on_message
-async def handle(ctx, msg):
-    text = msg.layers.summary or ""
-    await ctx.reply(summary=f"收到: {text}")
+# Minimum ANI tool access
+openclaw config set tools.profile messaging
+openclaw config set tools.alsoAllow '["ani_send_file","ani_fetch_chat_history_messages","ani_list_conversation_tasks","ani_get_task","ani_create_task","ani_update_task","ani_delete_task"]' --strict-json
 
-bot.run()
-# SDK 自动完成：WebSocket 连接 → 密钥升级 → 消息收发
+# Optional: allow public web lookups
+openclaw config set tools.allow '["group:web"]' --strict-json
+
+# Start the gateway
+openclaw gateway run
 `+"```"+`
 `,
 		entity.DisplayName,
 		serverURL, wsURL, returnedKey, entity.ID,
 		serverURL, serverURL,
 		serverURL, returnedKey, wsURL, entity.ID,
-		returnedKey, serverURL,
+		serverURL,
+		returnedKey,
 	)
 
 	OK(c, http.StatusCreated, gin.H{
