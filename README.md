@@ -58,6 +58,12 @@ curl http://localhost:9800/api/v1/health
 - Self-check endpoint, connection diagnostics, token regeneration
 - Avatar upload, metadata (description, tags, capabilities)
 
+### Identity Contract
+- Internal numeric `id` remains the database primary key and internal relation key for now.
+- `public_id` is the canonical external identity for entities and should be used for public API design, links, sharing, copy/display, and cross-system references.
+- `bot_id` is a human-readable bot handle, not a replacement for `public_id`.
+- Existing numeric-ID API fields may remain during the transition, but new external-facing surfaces should not treat numeric `id` as the long-term public contract.
+
 ### Conversations
 - Types: direct, group, channel
 - Lifecycle: archive, unarchive, pin

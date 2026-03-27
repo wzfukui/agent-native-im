@@ -14,6 +14,12 @@ All responses follow the envelope format:
 
 Authentication is via `Authorization: Bearer <token>` header (JWT or API key).
 
+Identity policy:
+
+- Internal numeric `id` is still used for database relations and some legacy APIs.
+- `public_id` is the canonical external identity for entities and should be preferred in new public APIs, links, share flows, and UI copy/display.
+- Numeric-ID-based external routes should be treated as transition compatibility, not the long-term public contract.
+
 ---
 
 ## Auth
