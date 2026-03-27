@@ -128,6 +128,34 @@ func (s *PGStore) SearchEntitiesByCapability(ctx context.Context, capability str
 	return entities, err
 }
 
+func (s *PGStore) SearchDiscoverableEntities(ctx context.Context, query string, limit int, excludeEntityID int64) ([]*model.Entity, error) {
+	var entities []*model.Entity
+	q := s.DB.NewSelect().Model(&entities).
+		Where("status = ?", "active")
+	if excludeEntityID > 0 {
+		q = q.Where("id != ?", excludeEntityID)
+	}
+	if query != "" {
+		like := "%" + query + "%"
+		q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+			return sq.
+				Where("display_name ILIKE ?", like).
+				WhereOr("name ILIKE ?", like).
+				WhereOr("bot_id ILIKE ?", like).
+				WhereOr("public_id::text ILIKE ?", like)
+		})
+	}
+	q = q.WhereGroup(" AND ", func(sq *bun.SelectQuery) *bun.SelectQuery {
+		return sq.
+			Where("entity_type = ?", model.EntityUser).
+			WhereOr("(entity_type IN (?, ?) AND discoverability != 'private')", model.EntityBot, model.EntityService)
+	})
+	err := q.OrderExpr("CASE WHEN entity_type = 'user' THEN 0 ELSE 1 END, updated_at DESC").
+		Limit(limit).
+		Scan(ctx)
+	return entities, err
+}
+
 func (s *PGStore) DeleteEntity(ctx context.Context, id int64) error {
 	_, err := s.DB.NewUpdate().Model((*model.Entity)(nil)).
 		Set("status = ?", "disabled").

@@ -12,9 +12,15 @@ func TestCreateConversation(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
+	botResp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "test-chat-bot"})
+	assertStatus(t, botResp, http.StatusCreated)
+	botData := parseOK(t, botResp)
+	botID := botData["entity"].(map[string]interface{})["id"].(float64)
+
 	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
-		"title":     "Test Chat",
-		"conv_type": "direct",
+		"title":           "Test Chat",
+		"conv_type":       "direct",
+		"participant_ids": []float64{botID},
 	})
 	assertStatus(t, resp, http.StatusCreated)
 
@@ -54,8 +60,8 @@ func TestListConversations(t *testing.T) {
 	token := seedAdmin(t)
 
 	// Create two conversations
-	doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Conv 1"})
-	doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Conv 2"})
+	doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Conv 1", "conv_type": "group"})
+	doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Conv 2", "conv_type": "group"})
 
 	resp := doJSON(t, "GET", "/api/v1/conversations", ptr(token), nil)
 	assertStatus(t, resp, http.StatusOK)
@@ -71,7 +77,7 @@ func TestGetConversation(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Get Me"})
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Get Me", "conv_type": "group"})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
 	convID := int(data["id"].(float64))
@@ -84,7 +90,7 @@ func TestGetConversationByPublicID(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
 
-	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Public ID lookup"})
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Public ID lookup", "conv_type": "group"})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
 	meta, _ := data["metadata"].(map[string]interface{})
@@ -105,7 +111,7 @@ func TestGetConversationByPublicIDForbiddenForNonParticipant(t *testing.T) {
 	truncateAll(t)
 	adminToken := seedAdmin(t)
 
-	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{"title": "Secret"})
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{"title": "Secret", "conv_type": "group"})
 	assertStatus(t, resp, http.StatusCreated)
 	data := parseOK(t, resp)
 	meta, _ := data["metadata"].(map[string]interface{})
@@ -134,7 +140,7 @@ func TestAddRemoveParticipant(t *testing.T) {
 	botID := botEntity["id"].(float64)
 
 	// Create conversation
-	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Part Test"})
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{"title": "Part Test", "conv_type": "group"})
 	assertStatus(t, resp, http.StatusCreated)
 	convData := parseOK(t, resp)
 	convID := int(convData["id"].(float64))
@@ -341,6 +347,15 @@ func TestMemberCannotAddOwnedBotToDirectConversation(t *testing.T) {
 	botData := parseOK(t, resp)
 	botEntity, _ := botData["entity"].(map[string]interface{})
 	botID := int(botEntity["id"].(float64))
+
+	resp = doJSON(t, "POST", "/api/v1/friends/requests", ptr(adminToken), map[string]interface{}{
+		"target_entity_id": memberID,
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	friendReqID := int(parseOK(t, resp)["id"].(float64))
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/friends/requests/%d/accept", friendReqID), ptr(memberToken), nil)
+	assertStatus(t, resp, http.StatusOK)
 
 	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(adminToken), map[string]interface{}{
 		"title":           "Owned Bot Direct",

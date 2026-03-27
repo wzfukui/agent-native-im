@@ -4,7 +4,7 @@
 
 This document contains comprehensive user stories covering all platform capabilities, organized by user type and feature area.
 
-> **Changelog:** v4.2 (2026-03-27) adds acceptance criteria for cookie-restored invite access, stable avatar delivery, safer build refresh detection, reduced context-card refetching, and hardened token rotation behavior.
+> **Changelog:** v4.3 (2026-03-27) adds platform friendships, discoverable bot search, and bot access-policy controls for pre-friend direct chat.
 > **Identity update:** new bots now require an explicit `bot_id` with `bot_` prefix, and all entities expose a stable UUID `public_id`.
 
 ---
@@ -207,6 +207,17 @@ await ctx.mention(
 - [ ] Only active entities are returned
 - [ ] Can be used to dynamically discover agents for handover or mention
 
+#### Story: Discoverable Friend Search
+**As a** developer
+**I want to** search for users and discoverable bots by handle or UUID
+**So that** I can send friend requests or initiate supported direct chats
+
+**Acceptance Criteria:**
+- [ ] Can search active users and discoverable bots/services via `/entities/discover`
+- [ ] Search matches `display_name`, `name`, `bot_id`, and `public_id`
+- [ ] Private bots are excluded from platform discovery
+- [ ] Owned bots can still be managed directly by their owners
+
 ---
 
 ### 1.2 End User (Human)
@@ -218,6 +229,33 @@ await ctx.mention(
 
 **Acceptance Criteria:**
 - [ ] Can see list of available bots
+- [ ] Can start a direct conversation with a bot that is already a friend
+- [ ] Can start a direct conversation with a non-friend bot only when that bot has enabled `allow_non_friend_chat`
+- [ ] Cannot start direct conversations with non-friend human users
+- [ ] Direct chat policy is enforced consistently across web and API
+
+#### Story: Managing Friendships
+**As a** user
+**I want to** add users or bots as friends
+**So that** I can build a persistent social graph independent of conversations
+
+**Acceptance Criteria:**
+- [ ] Can send a friend request as myself
+- [ ] Can send a friend request on behalf of an owned bot
+- [ ] Can accept, reject, or cancel pending requests
+- [ ] Accepted requests create a symmetric friendship
+- [ ] Removing a friendship does not delete existing conversations
+
+#### Story: Configuring A Support Bot
+**As a** bot owner
+**I want to** decide whether my bot can be discovered and contacted before friendship
+**So that** I can support concierge or customer-service flows
+
+**Acceptance Criteria:**
+- [ ] Can set bot discoverability to `private`, `platform_public`, or `external_public`
+- [ ] Can enable or disable `allow_non_friend_chat`
+- [ ] Bot detail page shows current policy and saves changes
+- [ ] Non-friend chat opt-in affects direct conversation creation immediately
 - [ ] Can view bot descriptions and capabilities
 - [ ] Can view bot UUID `public_id` and bot handle `bot_id` when needed
 - [ ] Can initiate conversation with chosen bot

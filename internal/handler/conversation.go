@@ -97,6 +97,36 @@ func (s *Server) HandleCreateConversation(c *gin.Context) {
 		convType = model.ConvChannel
 	}
 
+	initiator, err := s.Store.GetEntityByID(ctx, entityID)
+	if err != nil || initiator == nil {
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
+		return
+	}
+	normalizeDiscoverability(initiator)
+
+	if convType == model.ConvDirect {
+		if len(req.ParticipantIDs) > 1 {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "direct conversations require exactly one participant")
+			return
+		}
+		if len(req.ParticipantIDs) == 1 {
+			target, err := s.Store.GetEntityByID(ctx, req.ParticipantIDs[0])
+			if err != nil || target == nil {
+				FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "target entity not found")
+				return
+			}
+			normalizeDiscoverability(target)
+			if target.Status != "active" {
+				FailWithCode(c, http.StatusBadRequest, ErrCodeStateBadTransition, "target entity is not active")
+				return
+			}
+			if !s.canStartDirectConversation(c, initiator, target) {
+				FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "direct conversation requires friendship or bot opt-in")
+				return
+			}
+		}
+	}
+
 	conv := &model.Conversation{
 		ID:          generateConversationID(),
 		ConvType:    convType,
@@ -144,7 +174,7 @@ func (s *Server) HandleCreateConversation(c *gin.Context) {
 	}
 
 	// Reload conversation with participants
-	conv, err := s.Store.GetConversation(ctx, conv.ID)
+	conv, err = s.Store.GetConversation(ctx, conv.ID)
 	if err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to reload conversation")
 		return

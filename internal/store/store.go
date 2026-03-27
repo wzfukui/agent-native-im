@@ -20,6 +20,7 @@ type Store interface {
 	WebhookStore
 	PushStore
 	InviteStore
+	FriendStore
 	TaskStore
 	MemoryStore
 	ChangeRequestStore
@@ -61,9 +62,22 @@ type EntityStore interface {
 	ListEntitiesByOwner(ctx context.Context, ownerID int64) ([]*model.Entity, error)
 	ListAllEntities(ctx context.Context, limit, offset int) ([]*model.Entity, int, error)
 	SearchEntitiesByCapability(ctx context.Context, capability string) ([]*model.Entity, error)
+	SearchDiscoverableEntities(ctx context.Context, query string, limit int, excludeEntityID int64) ([]*model.Entity, error)
 	UpdateEntity(ctx context.Context, entity *model.Entity) error
 	DeleteEntity(ctx context.Context, id int64) error
 	ReactivateEntity(ctx context.Context, id int64) error
+}
+
+type FriendStore interface {
+	CreateFriendRequest(ctx context.Context, req *model.FriendRequest) error
+	GetFriendRequestByID(ctx context.Context, id int64) (*model.FriendRequest, error)
+	FindPendingFriendRequest(ctx context.Context, sourceID, targetID int64) (*model.FriendRequest, error)
+	ListFriendRequestsByEntity(ctx context.Context, entityID int64, direction, status string) ([]*model.FriendRequest, error)
+	UpdateFriendRequest(ctx context.Context, req *model.FriendRequest) error
+	CreateFriendship(ctx context.Context, friendship *model.Friendship) error
+	GetFriendship(ctx context.Context, entityA, entityB int64) (*model.Friendship, error)
+	ListFriends(ctx context.Context, entityID int64) ([]*model.Entity, error)
+	DeleteFriendship(ctx context.Context, entityA, entityB int64) error
 }
 
 type CredentialStore interface {

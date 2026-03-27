@@ -9,9 +9,14 @@
 - [ ] `go test ./...`
 - [ ] Run migration SQL in order (`migrations/*_up.sql`)
 - [ ] Confirm `000014_entity_public_id_bot_id.up.sql` applied successfully
+- [ ] Confirm `000015_friendships_and_bot_access.up.sql` applied successfully
 - [ ] Smoke API: `GET /api/v1/ping` and auth flow
 - [ ] Verify new bot creation rejects missing/invalid `bot_id`
 - [ ] Verify successful bot creation returns both `public_id` and `bot_id`
+- [ ] Verify `/api/v1/entities/discover` returns active users and excludes private bots
+- [ ] Verify friend request create/accept/remove flow for user-user and user-bot
+- [ ] Verify direct chat rejects non-friend human targets
+- [ ] Verify direct chat succeeds for bot targets with `allow_non_friend_chat = true`
 - [ ] Verify profile and entity avatar updates normalize to stored `/files/...` values
 - [ ] Verify repeated bot token rotation remains owner-only and revokes prior keys
 

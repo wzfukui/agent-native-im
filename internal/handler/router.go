@@ -101,6 +101,7 @@ func NewRouter(s *Server) *gin.Engine {
 				// Entity management (user-only at handler level)
 				full.POST("/entities", s.HandleCreateEntity)
 				full.GET("/entities", s.HandleListEntities)
+				full.GET("/entities/discover", s.HandleSearchDiscoverableEntities)
 				full.GET("/entities/search", s.HandleSearchEntities)
 				full.PUT("/entities/:id", s.HandleUpdateEntity)
 				full.DELETE("/entities/:id", s.HandleDeleteEntity)
@@ -112,6 +113,15 @@ func NewRouter(s *Server) *gin.Engine {
 				full.POST("/entities/:id/regenerate-token", s.HandleRegenerateEntityToken)
 				full.POST("/entities/:id/reactivate", s.HandleReactivateEntity)
 				full.POST("/presence/batch", s.HandleBatchPresence)
+
+				// Friends
+				full.GET("/friends", s.HandleListFriends)
+				full.GET("/friends/requests", s.HandleListFriendRequests)
+				full.POST("/friends/requests", s.HandleCreateFriendRequest)
+				full.POST("/friends/requests/:id/accept", s.HandleAcceptFriendRequest)
+				full.POST("/friends/requests/:id/reject", s.HandleRejectFriendRequest)
+				full.POST("/friends/requests/:id/cancel", s.HandleCancelFriendRequest)
+				full.DELETE("/friends/:entityId", s.HandleDeleteFriend)
 
 				// Webhook management
 				full.POST("/webhooks", s.HandleCreateWebhook)

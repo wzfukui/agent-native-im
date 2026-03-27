@@ -665,9 +665,11 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 	}
 
 	var req struct {
-		DisplayName *string                `json:"display_name"`
-		AvatarURL   *string                `json:"avatar_url"`
-		Metadata    map[string]interface{} `json:"metadata"`
+		DisplayName        *string                `json:"display_name"`
+		AvatarURL          *string                `json:"avatar_url"`
+		Discoverability    *string                `json:"discoverability"`
+		AllowNonFriendChat *bool                  `json:"allow_non_friend_chat"`
+		Metadata           map[string]interface{} `json:"metadata"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		Fail(c, http.StatusBadRequest, err.Error())
@@ -709,6 +711,28 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 		}
 		target.AvatarURL = avatarURL
 	}
+	if req.Discoverability != nil {
+		if target.EntityType != model.EntityBot && target.EntityType != model.EntityService {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "discoverability is only supported for bots and services")
+			return
+		}
+		value := strings.TrimSpace(*req.Discoverability)
+		if !validateDiscoverability(value) {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "invalid discoverability")
+			return
+		}
+		if value == "" {
+			value = "private"
+		}
+		target.Discoverability = value
+	}
+	if req.AllowNonFriendChat != nil {
+		if target.EntityType != model.EntityBot && target.EntityType != model.EntityService {
+			FailWithCode(c, http.StatusBadRequest, ErrCodeValidationField, "allow_non_friend_chat is only supported for bots and services")
+			return
+		}
+		target.AllowNonFriendChat = *req.AllowNonFriendChat
+	}
 	if req.Metadata != nil {
 		// Merge new metadata into existing
 		var existing map[string]interface{}
@@ -728,6 +752,7 @@ func (s *Server) HandleUpdateEntity(c *gin.Context) {
 		merged, _ := json.Marshal(existing)
 		target.Metadata = merged
 	}
+	normalizeDiscoverability(target)
 
 	if err := s.Store.UpdateEntity(ctx, target); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to update entity")

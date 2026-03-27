@@ -49,6 +49,9 @@ func TestMain(m *testing.M) {
 	if err := applyTestMigration(testStore, "000014_entity_public_id_bot_id.up.sql"); err != nil {
 		log.Fatalf("failed to apply test migration: %v", err)
 	}
+	if err := applyTestMigration(testStore, "000015_friendships_and_bot_access.up.sql"); err != nil {
+		log.Fatalf("failed to apply test migration: %v", err)
+	}
 
 	testHub = ws.NewHub(testStore)
 	go testHub.Run()
@@ -112,7 +115,7 @@ func testBotIDFromName(name string) string {
 func truncateAll(t *testing.T) {
 	t.Helper()
 	ctx := context.Background()
-	for _, table := range []string{"file_records", "reactions", "audit_logs", "conversation_change_requests", "conversation_memories", "tasks", "invite_links", "webhooks", "messages", "participants", "conversations", "credentials", "entities"} {
+	for _, table := range []string{"friendships", "friend_requests", "file_records", "reactions", "audit_logs", "conversation_change_requests", "conversation_memories", "tasks", "invite_links", "webhooks", "messages", "participants", "conversations", "credentials", "entities"} {
 		_, err := testStore.DB.NewRaw(fmt.Sprintf("TRUNCATE TABLE %s CASCADE", table)).Exec(ctx)
 		if err != nil {
 			// Table might not exist yet (e.g. reactions before migration 10)

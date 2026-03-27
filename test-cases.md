@@ -63,6 +63,95 @@ This document contains detailed test cases for all platform features, including 
 
 ## 2. Message Deduplication Tests
 
+## 2. Friendship And Bot Access Tests
+
+### TC-FRIEND-001: Friend Request Lifecycle
+**Priority:** High
+**Component:** Friend APIs, Friends UI
+
+**Preconditions:**
+- Two active user accounts exist
+
+**Steps:**
+1. User A sends a friend request to User B
+2. User B loads incoming requests
+3. User B accepts the request
+4. User A loads friend list
+5. User A removes the friendship
+
+**Expected Result:**
+- Friend request is created in `pending`
+- Incoming request is visible to User B
+- Accepting creates a symmetric friendship
+- Both sides see each other in `/friends`
+- Removing friendship succeeds without deleting prior conversations
+
+### TC-FRIEND-002: User Can Act For Owned Bot
+**Priority:** High
+**Component:** Friend APIs
+
+**Preconditions:**
+- Authenticated user owns Bot X
+- Another user or bot exists as target
+
+**Steps:**
+1. User sends friend request with `source_entity_id = Bot X`
+2. Target accepts the request
+3. User fetches `/friends?entity_id=<botX>`
+
+**Expected Result:**
+- Request is authorized
+- Friendship is recorded for Bot X, not the owning user
+- Bot X friend list returns the target entity
+
+### TC-BOT-ACCESS-001: Direct User Chat Requires Friendship
+**Priority:** High
+**Component:** Conversation API
+
+**Preconditions:**
+- User A and User B are active
+- No friendship exists between them
+
+**Steps:**
+1. User A attempts to create a direct conversation with User B
+2. Create friendship between User A and User B
+3. Retry direct conversation creation
+
+**Expected Result:**
+- First attempt is rejected with `403`
+- Second attempt succeeds after friendship exists
+
+### TC-BOT-ACCESS-002: Support Bot Allows Non-Friend Direct Chat
+**Priority:** High
+**Component:** Entity Policy, Conversation API
+
+**Preconditions:**
+- User A is not friends with Bot X
+- Bot X is configured with `discoverability = platform_public`
+- Bot X has `allow_non_friend_chat = true`
+
+**Steps:**
+1. User A creates a direct conversation with Bot X
+
+**Expected Result:**
+- Request succeeds with `201`
+- Conversation is created without a prior friendship
+
+### TC-BOT-ACCESS-003: Private Bot Stays Hidden From Discoverable Search
+**Priority:** Medium
+**Component:** Discoverable Entity Search
+
+**Preconditions:**
+- Bot X exists with `discoverability = private`
+
+**Steps:**
+1. Search `/entities/discover?q=<bot_id>`
+
+**Expected Result:**
+- Bot X is not returned in results
+
+## 3. Message Deduplication Tests
+
 ### TC-DEDUP-001: Prevent Duplicate Messages on Reconnection
 **Priority:** High
 **Component:** WebSocket Client, Message Manager

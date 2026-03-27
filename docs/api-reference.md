@@ -150,6 +150,19 @@ List entities owned by the authenticated user (with online status).
 - **Auth**: Required (user only)
 - **Response** `200`: Array of entity objects with `online` boolean, `public_id`, and `bot_id` when present
 
+### GET /entities/discover?q=...
+
+Search active users and discoverable bots/services by display name, handle, bot ID, or UUID.
+
+- **Auth**: Required
+- **Query**:
+  - `q` optional search text
+  - `limit` optional, default `20`, max `100`
+- **Response** `200`: Array of entity objects
+- **Notes**:
+  - Users are always discoverable inside the platform
+  - Bots/services are returned only when `discoverability != "private"`
+
 ### GET /entities/search?capability=...
 
 Search entities by capability (metadata tags/skills).
@@ -160,15 +173,78 @@ Search entities by capability (metadata tags/skills).
 
 ### PUT /entities/:id
 
-Update an owned entity's display name, avatar, or metadata.
+Update an owned entity's display name, avatar, metadata, or bot access policy.
 
 - **Auth**: Required (user only, must be owner)
 - **Request body**:
   ```json
-  { "display_name": "string (optional)", "avatar_url": "string (optional)", "metadata": {} }
+  {
+    "display_name": "string (optional)",
+    "avatar_url": "string (optional)",
+    "discoverability": "private|platform_public|external_public (bots/services only)",
+    "allow_non_friend_chat": "boolean (bots/services only)",
+    "metadata": {}
+  }
   ```
 - **Response** `200`: Updated entity
 - **Errors**: `403 PERM_NOT_OWNER`, `404 ENTITY_NOT_FOUND`
+
+## Friends
+
+### GET /friends
+
+List friends for the current entity, or for an owned bot via `entity_id`.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional. Users may use this to inspect an owned bot's graph.
+- **Response** `200`: Array of entity objects
+
+### GET /friends/requests
+
+List friend requests for the current entity or an owned bot.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional
+  - `direction`: `incoming|outgoing`
+  - `status`: `pending|accepted|rejected|canceled`
+- **Response** `200`: Array of friend request objects with `source_entity` and `target_entity`
+
+### POST /friends/requests
+
+Create a friend request. If there is already an opposite pending request, the request auto-accepts and creates a friendship.
+
+- **Auth**: Required
+- **Request body**:
+  ```json
+  {
+    "source_entity_id": 123,
+    "target_entity_id": 456,
+    "message": "optional"
+  }
+  ```
+- **Notes**:
+  - `source_entity_id` is optional for your own user entity
+  - Users may set `source_entity_id` to an owned bot
+
+### POST /friends/requests/:id/accept
+### POST /friends/requests/:id/reject
+### POST /friends/requests/:id/cancel
+
+Update a pending friend request.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional when acting as an owned bot
+
+### DELETE /friends/:entityId
+
+Delete an existing friendship between the acting entity and the target entity.
+
+- **Auth**: Required
+- **Query**:
+  - `entity_id` optional when acting as an owned bot
 
 ### DELETE /entities/:id
 
