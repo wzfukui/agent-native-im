@@ -73,6 +73,44 @@ func (s *Server) HandleCreateChangeRequest(c *gin.Context) {
 	// Enrich
 	requester, _ := s.Store.GetEntityByID(ctx, entityID)
 	cr.Requester = requester
+	s.attachEntityIdentity(ctx, requester)
+	convTitle := "Conversation"
+	if conv != nil && conv.Title != "" {
+		convTitle = conv.Title
+	}
+	requesterPublicID := ""
+	if requester != nil {
+		requesterPublicID = requester.PublicID
+	}
+
+	for _, participant := range conv.Participants {
+		if participant.EntityID == entityID {
+			continue
+		}
+		if participant.Role != model.RoleOwner && participant.Role != model.RoleAdmin {
+			continue
+		}
+		_, _ = s.createNotificationForRecipient(
+			ctx,
+			participant.EntityID,
+			&entityID,
+			"conversation.change_request",
+			"Conversation change requested",
+			fmt.Sprintf("%s requested to change %s in %s", getEntityDisplayName(requester), req.Field, convTitle),
+			map[string]any{
+				"conversation_id":         convID,
+				"conversation_title":      convTitle,
+				"conversation_public_id":  conversationPublicID(conv),
+				"change_request_id":       cr.ID,
+				"field":                   cr.Field,
+				"old_value":               cr.OldValue,
+				"new_value":               cr.NewValue,
+				"requester_id":            cr.RequesterID,
+				"requester_public_id":     requesterPublicID,
+				"requester_display_name":  getEntityDisplayName(requester),
+			},
+		)
+	}
 
 	// Broadcast to notify owners
 	if s.Hub != nil {
@@ -81,9 +119,8 @@ func (s *Server) HandleCreateChangeRequest(c *gin.Context) {
 		})
 	}
 
-	requesterName := getEntityDisplayName(requester)
 	s.broadcastSystemMessage(c, convID, entityID,
-		fmt.Sprintf("%s requested to change %s", requesterName, req.Field))
+		fmt.Sprintf("%s requested to change %s", getEntityDisplayName(requester), req.Field))
 
 	OK(c, http.StatusCreated, cr)
 }
@@ -222,6 +259,45 @@ func (s *Server) resolveChangeRequest(c *gin.Context, approved bool) {
 		action = "approved"
 	}
 	approver, _ := s.Store.GetEntityByID(ctx, entityID)
+	requester, _ := s.Store.GetEntityByID(ctx, cr.RequesterID)
+	conv, _ := s.Store.GetConversation(ctx, convID)
+	convTitle := "Conversation"
+	if conv != nil && conv.Title != "" {
+		convTitle = conv.Title
+	}
+	requesterPublicID := ""
+	if requester != nil {
+		requesterPublicID = requester.PublicID
+	}
+	approverPublicID := ""
+	if approver != nil {
+		approverPublicID = approver.PublicID
+	}
+	s.attachEntityIdentity(ctx, approver)
+	s.attachEntityIdentity(ctx, requester)
+	_, _ = s.createNotificationForRecipient(
+		ctx,
+		cr.RequesterID,
+		&entityID,
+		"conversation.change_"+action,
+		"Conversation change request "+action,
+		fmt.Sprintf("%s %s your request to change %s in %s", getEntityDisplayName(approver), action, cr.Field, convTitle),
+		map[string]any{
+			"conversation_id":         convID,
+			"conversation_title":      convTitle,
+			"conversation_public_id":  conversationPublicID(conv),
+			"change_request_id":       cr.ID,
+			"field":                   cr.Field,
+			"old_value":               cr.OldValue,
+			"new_value":               cr.NewValue,
+			"status":                  map[bool]string{true: string(model.CRApproved), false: string(model.CRRejected)}[approved],
+			"requester_id":            cr.RequesterID,
+			"requester_public_id":     requesterPublicID,
+			"approver_id":             entityID,
+			"approver_public_id":      approverPublicID,
+			"approver_display_name":   getEntityDisplayName(approver),
+		},
+	)
 	s.broadcastSystemMessage(c, convID, entityID,
 		fmt.Sprintf("%s %s the change request for %s", getEntityDisplayName(approver), action, cr.Field))
 

@@ -165,6 +165,47 @@ func TestJoinViaInvite(t *testing.T) {
 	}
 }
 
+func TestJoinViaInviteCreatesAdminNotification(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	doJSON(t, "POST", "/api/v1/admin/users", ptr(token), map[string]string{
+		"username": "joiner_notify",
+		"password": "Joiner123",
+	})
+	joinerToken := login(t, "joiner_notify", "Joiner123")
+
+	resp := doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title": "Invite Notify",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	data := parseOK(t, resp)
+	convID := int(data["id"].(float64))
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/invite", convID), ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	data = parseOK(t, resp)
+	code := data["code"].(string)
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/invite/%s/join", code), ptr(joinerToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	notifications := parseResponse(t, resp)["data"].([]interface{})
+	found := false
+	for _, item := range notifications {
+		notification := item.(map[string]interface{})
+		if notification["kind"] == "invite.joined" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected invite.joined notification for conversation admin")
+	}
+}
+
 func TestJoinViaInviteAlreadyParticipant(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)

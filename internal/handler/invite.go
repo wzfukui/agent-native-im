@@ -123,6 +123,7 @@ func (s *Server) HandleGetInviteInfo(c *gin.Context) {
 func (s *Server) HandleJoinViaInvite(c *gin.Context) {
 	entityID := auth.GetEntityID(c)
 	code := c.Param("code")
+	ctx := c.Request.Context()
 
 	link, err := s.Store.GetInviteLinkByCode(c, code)
 	if err != nil {
@@ -175,6 +176,42 @@ func (s *Server) HandleJoinViaInvite(c *gin.Context) {
 	}
 	s.broadcastSystemMessage(c, link.ConversationID, entityID, name+" joined via invite link")
 
+	conv, _ := s.Store.GetConversation(ctx, link.ConversationID)
+	convTitle := "Conversation"
+	if conv != nil && conv.Title != "" {
+		convTitle = conv.Title
+	}
+	joinedEntityPublicID := ""
+	if ent != nil {
+		joinedEntityPublicID = ent.PublicID
+	}
+	participants, _ := s.Store.ListParticipants(ctx, link.ConversationID)
+	for _, participant := range participants {
+		if participant.EntityID == entityID {
+			continue
+		}
+		if participant.Role != model.RoleOwner && participant.Role != model.RoleAdmin {
+			continue
+		}
+		_, _ = s.createNotificationForRecipient(
+			ctx,
+			participant.EntityID,
+			&entityID,
+			"invite.joined",
+			"Member joined via invite",
+			name+" joined via invite link",
+			map[string]any{
+				"conversation_id":        link.ConversationID,
+				"conversation_title":     convTitle,
+				"conversation_public_id": conversationPublicID(conv),
+				"joined_entity_id":       entityID,
+				"joined_entity_public_id": joinedEntityPublicID,
+				"joined_entity_name":     name,
+				"invite_code":            link.Code,
+			},
+		)
+	}
+
 	// Broadcast update
 	if s.Hub != nil {
 		s.Hub.BroadcastEvent(link.ConversationID, "conversation.updated", map[string]interface{}{
@@ -184,7 +221,6 @@ func (s *Server) HandleJoinViaInvite(c *gin.Context) {
 		})
 	}
 
-	conv, _ := s.Store.GetConversation(c, link.ConversationID)
 	OK(c, http.StatusOK, conv)
 }
 

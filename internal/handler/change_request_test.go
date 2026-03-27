@@ -43,6 +43,21 @@ func TestCreateChangeRequest(t *testing.T) {
 	if data["status"] != "pending" {
 		t.Fatalf("expected status 'pending', got %v", data["status"])
 	}
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(token), nil)
+	assertStatus(t, resp, http.StatusOK)
+	notifications := parseResponse(t, resp)["data"].([]interface{})
+	found := false
+	for _, item := range notifications {
+		notification := item.(map[string]interface{})
+		if notification["kind"] == "conversation.change_request" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected conversation.change_request notification for owner")
+	}
 }
 
 func TestListChangeRequests(t *testing.T) {
@@ -129,6 +144,21 @@ func TestApproveChangeRequest(t *testing.T) {
 	if data["title"] != "Approved Title" {
 		t.Fatalf("expected conversation title 'Approved Title', got %v", data["title"])
 	}
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(memberToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	notifications := parseResponse(t, resp)["data"].([]interface{})
+	found := false
+	for _, item := range notifications {
+		notification := item.(map[string]interface{})
+		if notification["kind"] == "conversation.change_approved" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected conversation.change_approved notification for requester")
+	}
 }
 
 func TestRejectChangeRequest(t *testing.T) {
@@ -172,6 +202,21 @@ func TestRejectChangeRequest(t *testing.T) {
 	data = parseOK(t, resp)
 	if data["title"] != "Reject CR Test" {
 		t.Fatalf("expected conversation title unchanged, got %v", data["title"])
+	}
+
+	resp = doJSON(t, "GET", "/api/v1/notifications?status=unread", ptr(memberToken), nil)
+	assertStatus(t, resp, http.StatusOK)
+	notifications := parseResponse(t, resp)["data"].([]interface{})
+	found := false
+	for _, item := range notifications {
+		notification := item.(map[string]interface{})
+		if notification["kind"] == "conversation.change_rejected" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected conversation.change_rejected notification for requester")
 	}
 }
 

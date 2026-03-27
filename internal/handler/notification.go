@@ -12,6 +12,20 @@ import (
 	"github.com/wzfukui/agent-native-im/internal/ws"
 )
 
+func conversationPublicID(conv *model.Conversation) string {
+	if conv == nil || len(conv.Metadata) == 0 {
+		return ""
+	}
+	var metadata map[string]any
+	if err := json.Unmarshal(conv.Metadata, &metadata); err != nil {
+		return ""
+	}
+	if raw, ok := metadata["public_id"].(string); ok {
+		return raw
+	}
+	return ""
+}
+
 func (s *Server) attachNotificationIdentity(ctx context.Context, notification *model.Notification) {
 	if notification == nil {
 		return
@@ -42,6 +56,35 @@ func (s *Server) createNotification(c *gin.Context, recipientID int64, actorID *
 		notification.ActorEntity, _ = s.Store.GetEntityByID(c.Request.Context(), *actorID)
 	}
 	s.attachNotificationIdentity(c.Request.Context(), notification)
+	s.Hub.SendToEntity(recipientID, ws.WSMessage{
+		Type: "notification.new",
+		Data: notification,
+	})
+	return notification, nil
+}
+
+func (s *Server) createNotificationForRecipient(ctx context.Context, recipientID int64, actorID *int64, kind, title, body string, payload map[string]any) (*model.Notification, error) {
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return nil, err
+	}
+	notification := &model.Notification{
+		RecipientEntityID: recipientID,
+		ActorEntityID:     actorID,
+		Kind:              kind,
+		Status:            model.NotificationUnread,
+		Title:             title,
+		Body:              body,
+		Data:              data,
+	}
+	if err := s.Store.CreateNotification(ctx, notification); err != nil {
+		return nil, err
+	}
+	notification.RecipientEntity, _ = s.Store.GetEntityByID(ctx, recipientID)
+	if actorID != nil {
+		notification.ActorEntity, _ = s.Store.GetEntityByID(ctx, *actorID)
+	}
+	s.attachNotificationIdentity(ctx, notification)
 	s.Hub.SendToEntity(recipientID, ws.WSMessage{
 		Type: "notification.new",
 		Data: notification,

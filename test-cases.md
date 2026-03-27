@@ -126,6 +126,27 @@ This document contains detailed test cases for all platform features, including 
 - Sidebar/mobile badges stay in sync with inbox state
 - Both sides appear in `/friends`
 
+### TC-INBOX-002: Invite Join And Change Request Notifications
+**Priority:** High
+**Component:** Invite API, Change Request API, Inbox UI
+
+**Preconditions:**
+- A group conversation exists with an owner and a member
+
+**Steps:**
+1. Owner creates an invite link and a new user joins through it
+2. Owner opens inbox and reviews unread items
+3. Member submits a conversation change request
+4. Owner opens inbox and reviews unread items
+5. Owner approves or rejects the request
+6. Member opens inbox and reviews unread items
+
+**Expected Result:**
+- Owner receives `invite.joined`
+- Owner receives `conversation.change_request`
+- Member receives `conversation.change_approved` or `conversation.change_rejected`
+- Inbox items carry enough conversation context to open the relevant chat directly
+
 ### TC-BOT-ACCESS-001: Direct User Chat Requires Friendship
 **Priority:** High
 **Component:** Conversation API

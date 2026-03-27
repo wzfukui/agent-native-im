@@ -1068,6 +1068,17 @@ Streaming messages (not persisted until `stream_end`):
 | `notification.new` | Inbox notification created | Notification object |
 | `notification.read` | Inbox notification marked read | Notification object |
 | `notification.read_all` | All inbox notifications marked read | `{ entity_id }` |
+
+Current inbox notification kinds include:
+
+- `friend.request.received`
+- `friend.request.accepted`
+- `friend.request.rejected`
+- `friend.request.canceled`
+- `invite.joined`
+- `conversation.change_request`
+- `conversation.change_approved`
+- `conversation.change_rejected`
 | `ping` | Heartbeat | Respond with `pong` |
 
 ---
