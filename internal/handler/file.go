@@ -204,6 +204,13 @@ func (s *Server) HandleFileUpload(c *gin.Context) {
 	}
 	if err := s.Store.CreateFileRecord(c.Request.Context(), record); err != nil {
 		slog.Warn("failed to create file record", "stored_name", storedName, "error", err)
+		if filePath, safe := safeFilePath(s.FileStore.ServePath(), storedName); safe {
+			if removeErr := os.Remove(filePath); removeErr != nil && !os.IsNotExist(removeErr) {
+				slog.Warn("failed to remove orphaned upload after metadata error", "stored_name", storedName, "error", removeErr)
+			}
+		}
+		Fail(c, http.StatusInternalServerError, "failed to persist file metadata")
+		return
 	}
 
 	OK(c, http.StatusCreated, gin.H{

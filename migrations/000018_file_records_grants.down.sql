@@ -1,0 +1,2 @@
+REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLE file_records FROM agent_im;
+REVOKE USAGE, SELECT ON SEQUENCE file_records_id_seq FROM agent_im;
