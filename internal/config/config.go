@@ -8,7 +8,6 @@ type Config struct {
 	JWTSecret         string
 	JWTTTLHours       int
 	AdminUser         string
-	AdminPass         string
 	ServerURL         string
 	AutoApproveAgents bool
 	VAPIDPublicKey    string
@@ -18,16 +17,10 @@ type Config struct {
 }
 
 func Load() *Config {
-	// Critical: JWT_SECRET and ADMIN_PASS must be set via environment variables
-	// No defaults are provided for security reasons
+	// Critical: JWT_SECRET must be set via environment variables.
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		panic("JWT_SECRET environment variable is required")
-	}
-
-	adminPass := os.Getenv("ADMIN_PASS")
-	if adminPass == "" {
-		panic("ADMIN_PASS environment variable is required")
 	}
 
 	return &Config{
@@ -35,8 +28,7 @@ func Load() *Config {
 		DatabaseURL:       getEnv("DATABASE_URL", "postgres://chris@localhost/agent_im?sslmode=disable"),
 		JWTSecret:         jwtSecret,
 		JWTTTLHours:       getEnvInt("JWT_TTL_HOURS", 24),
-		AdminUser:         getEnv("ADMIN_USER", "chris"),
-		AdminPass:         adminPass,
+		AdminUser:         getEnv("ADMIN_USER", ""),
 		ServerURL:         getEnv("SERVER_URL", "http://localhost:9800"),
 		AutoApproveAgents: getEnv("AUTO_APPROVE_AGENTS", "") == "true",
 		VAPIDPublicKey:    getEnv("VAPID_PUBLIC_KEY", ""),

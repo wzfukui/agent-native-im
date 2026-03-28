@@ -70,7 +70,6 @@ func TestMain(m *testing.M) {
 		Port:      "0",
 		JWTSecret: "test-secret",
 		AdminUser: "testadmin",
-		AdminPass: "testpass",
 		ServerURL: "http://localhost:9800",
 	}
 

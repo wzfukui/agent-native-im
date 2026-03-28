@@ -66,17 +66,15 @@ func NewRouter(s *Server) *gin.Engine {
 		v1.GET("/public/bots/:identifier", s.HandleGetPublicBot)
 		v1.POST("/public/bots/:identifier/session", rateLimiters["login"].Middleware(), s.HandleCreatePublicBotSession)
 
-		// Authenticated (any entity type, including bootstrap keys)
+		// Authenticated (JWT or permanent API key)
 		authed := v1.Group("")
 		authed.Use(auth.EntityAuth(s.Config.JWTSecret, s.Store))
 		authed.Use(middleware.Audit(s.Store))
 		{
-			// Bootstrap-key-accessible endpoints
 			authed.GET("/me", s.HandleMe)
 			authed.POST("/auth/refresh", s.HandleRefreshToken)
 			authed.POST("/auth/logout", s.HandleLogout)
 
-			// Full-auth-only endpoints (bootstrap keys blocked)
 			full := authed.Group("")
 			full.Use(auth.RequireFullAuth())
 			{
@@ -210,7 +208,7 @@ func NewRouter(s *Server) *gin.Engine {
 			}
 		}
 
-		// WebSocket (auth via query param, supports bootstrap keys)
+		// WebSocket (auth via Authorization header, subprotocol, or cookie)
 		v1.GET("/ws", s.HandleWS)
 
 		// Authenticated file serving (replaces public static)

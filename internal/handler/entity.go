@@ -23,7 +23,6 @@ import (
 )
 
 const (
-	keyPrefixBootstrap = "aimb_"
 	keyPrefixPermanent = "aim_"
 )
 
@@ -243,8 +242,7 @@ pnpm install
 	})
 }
 
-// HandleApproveConnection approves a Bot's connection request.
-// It generates a permanent API key, deletes the bootstrap key, and pushes the new key via WebSocket.
+// HandleApproveConnection is retained for compatibility and rotates the entity's permanent key.
 func (s *Server) HandleApproveConnection(c *gin.Context) {
 	if auth.GetEntityType(c) != model.EntityUser {
 		FailWithCode(c, http.StatusForbidden, ErrCodePermDenied, "only users can approve connections")
@@ -285,13 +283,7 @@ func (s *Server) HandleApproveConnection(c *gin.Context) {
 		return
 	}
 
-	// Delete all bootstrap credentials for this entity
-	if err := s.Store.DeleteCredentialsByType(c.Request.Context(), entityID, model.CredBootstrap); err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to revoke bootstrap key")
-		return
-	}
-
-	// Push new key to the Bot via WebSocket
+	// Push new key to the entity via WebSocket if it is connected.
 	if s.Hub != nil {
 		s.Hub.SendToEntity(entityID, ws.WSMessage{
 			Type: "connection.approved",
@@ -350,19 +342,11 @@ func (s *Server) HandleGetCredentials(c *gin.Context) {
 		return
 	}
 
-	bootstrapCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredBootstrap)
 	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
 
-	bootstrapPrefix := ""
-	if len(bootstrapCreds) > 0 {
-		bootstrapPrefix = bootstrapCreds[0].RawPrefix
-	}
-
 	OK(c, http.StatusOK, gin.H{
-		"entity_id":        entityID,
-		"has_bootstrap":    len(bootstrapCreds) > 0,
-		"has_api_key":      len(apiKeyCreds) > 0,
-		"bootstrap_prefix": bootstrapPrefix,
+		"entity_id":   entityID,
+		"has_api_key": len(apiKeyCreds) > 0,
 	})
 }
 
@@ -432,7 +416,6 @@ func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	bootstrapCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredBootstrap)
 	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
 
 	isOnline := s.Hub.IsOnline(entityID)
@@ -443,11 +426,7 @@ func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
 		recommendations = append(recommendations, "entity is disabled, reactivate it first")
 	}
 	if len(apiKeyCreds) == 0 {
-		if len(bootstrapCreds) > 0 {
-			recommendations = append(recommendations, "bot is still using bootstrap key, complete approval to issue permanent key")
-		} else {
-			recommendations = append(recommendations, "no credentials found, recreate or re-approve this bot")
-		}
+		recommendations = append(recommendations, "no permanent api key found, regenerate the bot token or recreate this bot")
 	}
 	if !isOnline {
 		recommendations = append(recommendations, "bot is offline, verify network and websocket handshake")
@@ -459,7 +438,6 @@ func (s *Server) HandleEntitySelfCheck(c *gin.Context) {
 		"status":         target.Status,
 		"online":         isOnline,
 		"ready":          ready,
-		"has_bootstrap":  len(bootstrapCreds) > 0,
 		"has_api_key":    len(apiKeyCreds) > 0,
 		"recommendation": recommendations,
 	})
@@ -473,7 +451,6 @@ func (s *Server) HandleEntityDiagnostics(c *gin.Context) {
 	}
 
 	ctx := c.Request.Context()
-	bootstrapCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredBootstrap)
 	apiKeyCreds, _ := s.Store.GetCredentialsByEntity(ctx, entityID, model.CredAPIKey)
 	devices := s.Hub.GetConnectedDevices(entityID)
 
@@ -487,7 +464,6 @@ func (s *Server) HandleEntityDiagnostics(c *gin.Context) {
 		"forced_disconnect_count": s.Hub.ForcedDisconnectCount(entityID),
 		"devices":                 devices,
 		"credentials": gin.H{
-			"has_bootstrap": len(bootstrapCreds) > 0,
 			"has_api_key":   len(apiKeyCreds) > 0,
 		},
 		"hub": gin.H{
@@ -523,13 +499,9 @@ func (s *Server) HandleRegenerateEntityToken(c *gin.Context) {
 		return
 	}
 
-	// Now revoke all old credentials (API keys and bootstrap keys) except the new one.
+	// Now revoke all old permanent credentials except the new one.
 	if err := s.Store.DeleteCredentialsByTypeExceptHash(ctx, entityID, model.CredAPIKey, keyHash); err != nil {
 		Fail(c, http.StatusInternalServerError, "failed to revoke previous api keys")
-		return
-	}
-	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredBootstrap); err != nil {
-		Fail(c, http.StatusInternalServerError, "failed to revoke bootstrap key")
 		return
 	}
 

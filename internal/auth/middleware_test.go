@@ -117,21 +117,13 @@ func TestIsBootstrap(t *testing.T) {
 	r := httptest.NewRequest("GET", "/", nil)
 	c := newContext(r)
 
-	// Not set -> false
 	if IsBootstrap(c) {
-		t.Fatal("expected false when bootstrapPending not set")
+		t.Fatal("expected false by default")
 	}
 
-	// Set to true
 	c.Set("bootstrapPending", true)
-	if !IsBootstrap(c) {
-		t.Fatal("expected true when bootstrapPending is true")
-	}
-
-	// Set to false
-	c.Set("bootstrapPending", false)
 	if IsBootstrap(c) {
-		t.Fatal("expected false when bootstrapPending is false")
+		t.Fatal("expected false even when legacy bootstrapPending is set")
 	}
 }
 

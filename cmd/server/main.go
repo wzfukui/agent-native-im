@@ -34,11 +34,6 @@ func main() {
 	}
 	defer st.Close()
 
-	if err := st.SeedAdmin(context.Background(), cfg.AdminUser, cfg.AdminPass); err != nil {
-		slog.Error("failed to seed admin", "error", err)
-		os.Exit(1)
-	}
-
 	wh := webhook.NewDeliverer(st)
 	hub := ws.NewHub(st)
 

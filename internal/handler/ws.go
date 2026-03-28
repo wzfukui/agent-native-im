@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -15,7 +14,6 @@ import (
 	"github.com/gin-gonic/gin"
 	gorillaWs "github.com/gorilla/websocket"
 	"github.com/wzfukui/agent-native-im/internal/auth"
-	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/utils"
 	ws_pkg "github.com/wzfukui/agent-native-im/internal/ws"
 )
@@ -81,7 +79,6 @@ func (s *Server) HandleWS(c *gin.Context) {
 	}
 
 	var entityID int64
-	var isBootstrap bool
 
 	// Try JWT first
 	claims, err := auth.ParseToken(s.Config.JWTSecret, token)
@@ -95,7 +92,6 @@ func (s *Server) HandleWS(c *gin.Context) {
 			return
 		}
 		entityID = cred.EntityID
-		isBootstrap = cred.CredType == model.CredBootstrap
 	}
 
 	// Reject disabled entities before upgrading the connection
@@ -147,29 +143,6 @@ func (s *Server) HandleWS(c *gin.Context) {
 		})
 	}
 
-	// Auto-approve if configured globally OR per-entity metadata
-	if isBootstrap {
-		shouldAutoApprove := s.Config.AutoApproveAgents
-		if !shouldAutoApprove {
-			// Check per-entity metadata for auto_approve flag
-			entity, err := s.Store.GetEntityByID(context.Background(), entityID)
-			if err == nil && len(entity.Metadata) > 0 {
-				var meta map[string]interface{}
-				if json.Unmarshal(entity.Metadata, &meta) == nil {
-					if v, ok := meta["auto_approve"]; ok {
-						if b, ok := v.(bool); ok && b {
-							shouldAutoApprove = true
-						}
-					}
-				}
-			}
-		}
-		if shouldAutoApprove {
-			utils.SafeGo(fmt.Sprintf("auto-approve-%d", entityID), func() {
-				s.autoApproveEntity(entityID)
-			})
-		}
-	}
 }
 
 // sendCatchUpMessages queries missed messages and sends them to the client as message.new events.
@@ -199,39 +172,4 @@ func (s *Server) sendCatchUpMessages(client *ws_pkg.Client, entityID, sinceID in
 			Data: msg,
 		})
 	}
-}
-
-// autoApproveEntity generates a permanent key, deletes bootstrap creds, and pushes via WS.
-func (s *Server) autoApproveEntity(entityID int64) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	permanentKey := generateKey(keyPrefixPermanent)
-	keyHash := fmt.Sprintf("%x", sha256.Sum256([]byte(permanentKey)))
-
-	cred := &model.Credential{
-		EntityID:   entityID,
-		CredType:   model.CredAPIKey,
-		SecretHash: keyHash,
-		RawPrefix:  permanentKey[:8],
-	}
-
-	if err := s.Store.CreateCredential(ctx, cred); err != nil {
-		slog.Error("auto-approve: failed to create credential", "entity_id", entityID, "error", err)
-		return
-	}
-
-	if err := s.Store.DeleteCredentialsByType(ctx, entityID, model.CredBootstrap); err != nil {
-		slog.Error("auto-approve: failed to delete bootstrap keys", "entity_id", entityID, "error", err)
-		return
-	}
-
-	s.Hub.SendToEntity(entityID, ws_pkg.WSMessage{
-		Type: "connection.approved",
-		Data: map[string]interface{}{
-			"api_key": permanentKey,
-			"message": "Connection auto-approved. Use this permanent key for all future requests.",
-		},
-	})
-
-	slog.Info("auto-approve: entity approved with permanent key", "entity_id", entityID)
 }

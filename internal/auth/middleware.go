@@ -32,9 +32,8 @@ func fail(c *gin.Context, code int, msg string) {
 }
 
 // EntityAuth is the unified authentication middleware.
-// It first tries JWT (for user sessions), then falls back to API key lookup (for bots/services).
+// It first tries JWT (for user sessions), then falls back to permanent API key lookup (for bots/services).
 // On success it sets "entityID" (int64) and "entityType" (model.EntityType) in the Gin context.
-// If authenticated via bootstrap key, it also sets "bootstrapPending" (bool) = true.
 func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr := extractBearer(c)
@@ -89,7 +88,7 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 			}
 		}
 
-		// 2. Try API key / bootstrap key
+		// 2. Try permanent API key
 		cred, err := ResolveAPIKey(c.Request.Context(), st, tokenStr)
 		if err == nil {
 			entity, err := st.GetEntityByID(c.Request.Context(), cred.EntityID)
@@ -102,9 +101,6 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 				}
 				c.Set("entityID", entity.ID)
 				c.Set("entityType", entity.EntityType)
-				if cred.CredType == model.CredBootstrap {
-					c.Set("bootstrapPending", true)
-				}
 				c.Next()
 				return
 			}
@@ -115,15 +111,9 @@ func EntityAuth(secret string, st store.Store) gin.HandlerFunc {
 	}
 }
 
-// RequireFullAuth blocks requests authenticated with bootstrap keys.
-// Bootstrap keys are only allowed to access /me and /ws.
+// RequireFullAuth is kept as a compatibility middleware so legacy routes don't need rewiring.
 func RequireFullAuth() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if IsBootstrap(c) {
-			fail(c, http.StatusForbidden, "bootstrap key cannot access this endpoint. Bootstrap keys can only access /me and /ws. To get a permanent key: 1) connect via WebSocket with Authorization: Bearer YOUR_BOOTSTRAP_KEY, 2) wait for auto-approve or manual approval, 3) receive permanent key (aim_ prefix) via WebSocket message. See /api/v1/onboarding-guide for details.")
-			c.Abort()
-			return
-		}
 		c.Next()
 	}
 }
@@ -142,14 +132,9 @@ func GetEntityType(c *gin.Context) model.EntityType {
 	return ""
 }
 
-// IsBootstrap returns true if the current request was authenticated with a bootstrap key.
+// IsBootstrap is retained for backwards compatibility. Bootstrap keys are no longer supported.
 func IsBootstrap(c *gin.Context) bool {
-	v, exists := c.Get("bootstrapPending")
-	if !exists {
-		return false
-	}
-	b, ok := v.(bool)
-	return ok && b
+	return false
 }
 
 // RequireAdmin blocks requests from non-admin users.
@@ -195,7 +180,7 @@ func ClearAuthCookie(c *gin.Context) {
 	c.SetCookie("aim_token", "", -1, "/", "", secure, true)
 }
 
-// ResolveAPIKey looks up an entity by API key or bootstrap key (prefix + hash verification).
+// ResolveAPIKey looks up an entity by permanent API key (prefix + hash verification).
 // Returns the matching credential on success.
 func ResolveAPIKey(ctx context.Context, st store.Store, apiKey string) (*model.Credential, error) {
 	if len(apiKey) < 8 {
@@ -203,14 +188,7 @@ func ResolveAPIKey(ctx context.Context, st store.Store, apiKey string) (*model.C
 	}
 	prefix := apiKey[:8]
 	fullHash := fmt.Sprintf("%x", sha256.Sum256([]byte(apiKey)))
-
-	// Determine credential type from key prefix
-	credType := model.CredAPIKey
-	if strings.HasPrefix(apiKey, "aimb_") {
-		credType = model.CredBootstrap
-	}
-
-	creds, err := st.GetCredentialByPrefix(ctx, credType, prefix)
+	creds, err := st.GetCredentialByPrefix(ctx, model.CredAPIKey, prefix)
 	if err != nil {
 		return nil, err
 	}
@@ -220,21 +198,5 @@ func ResolveAPIKey(ctx context.Context, st store.Store, apiKey string) (*model.C
 			return cred, nil
 		}
 	}
-
-	// If not found with detected type, try the other type as fallback (backward compat)
-	if credType == model.CredAPIKey {
-		creds, err = st.GetCredentialByPrefix(ctx, model.CredBootstrap, prefix)
-	} else {
-		creds, err = st.GetCredentialByPrefix(ctx, model.CredAPIKey, prefix)
-	}
-	if err != nil {
-		return nil, err
-	}
-	for _, cred := range creds {
-		if cred.SecretHash == fullHash {
-			return cred, nil
-		}
-	}
-
 	return nil, fmt.Errorf("api key not found")
 }
