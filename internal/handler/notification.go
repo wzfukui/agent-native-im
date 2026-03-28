@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+	"github.com/wzfukui/agent-native-im/internal/auth"
 	"github.com/wzfukui/agent-native-im/internal/model"
 	"github.com/wzfukui/agent-native-im/internal/push"
 	"github.com/wzfukui/agent-native-im/internal/ws"
@@ -210,6 +211,82 @@ func (s *Server) HandleListNotifications(c *gin.Context) {
 		notifications = []*model.Notification{}
 	}
 	OK(c, http.StatusOK, notifications)
+}
+
+// GET /inbox/snapshot
+func (s *Server) HandleInboxSnapshot(c *gin.Context) {
+	authEntityID := auth.GetEntityID(c)
+	authEntity, err := s.Store.GetEntityByID(c.Request.Context(), authEntityID)
+	if err != nil || authEntity == nil {
+		FailWithCode(c, http.StatusNotFound, ErrCodeEntityNotFound, "entity not found")
+		return
+	}
+
+	actingEntities := []*model.Entity{authEntity}
+	if authEntity.EntityType == model.EntityUser {
+		ownedBots, err := s.Store.ListEntitiesByOwner(c.Request.Context(), authEntity.ID)
+		if err != nil {
+			Fail(c, http.StatusInternalServerError, "failed to list entities")
+			return
+		}
+		actingEntities = append(actingEntities, ownedBots...)
+	}
+
+	trackedEntityIDs := make([]int64, 0, len(actingEntities))
+	pendingRequests := make([]*model.FriendRequest, 0)
+	notifications := make([]*model.Notification, 0)
+	seenRequestIDs := make(map[int64]struct{})
+	seenNotificationIDs := make(map[int64]struct{})
+
+	for _, entity := range actingEntities {
+		if entity == nil {
+			continue
+		}
+		s.attachEntityIdentity(c.Request.Context(), entity)
+		trackedEntityIDs = append(trackedEntityIDs, entity.ID)
+
+		reqs, err := s.Store.ListFriendRequestsByEntity(c.Request.Context(), entity.ID, "incoming", string(model.FriendRequestPending))
+		if err != nil {
+			Fail(c, http.StatusInternalServerError, "failed to list friend requests")
+			return
+		}
+		for _, req := range reqs {
+			if req == nil {
+				continue
+			}
+			if _, exists := seenRequestIDs[req.ID]; exists {
+				continue
+			}
+			seenRequestIDs[req.ID] = struct{}{}
+			s.attachEntityIdentity(c.Request.Context(), req.SourceEntity)
+			s.attachEntityIdentity(c.Request.Context(), req.TargetEntity)
+			pendingRequests = append(pendingRequests, req)
+		}
+
+		entityNotifications, err := s.Store.ListNotificationsByEntity(c.Request.Context(), entity.ID, "", 200)
+		if err != nil {
+			Fail(c, http.StatusInternalServerError, "failed to list notifications")
+			return
+		}
+		for _, notification := range entityNotifications {
+			if notification == nil {
+				continue
+			}
+			if _, exists := seenNotificationIDs[notification.ID]; exists {
+				continue
+			}
+			seenNotificationIDs[notification.ID] = struct{}{}
+			s.attachNotificationIdentity(c.Request.Context(), notification)
+			notifications = append(notifications, notification)
+		}
+	}
+
+	OK(c, http.StatusOK, gin.H{
+		"tracked_entity_ids":      trackedEntityIDs,
+		"acting_entities":         actingEntities,
+		"pending_friend_requests": pendingRequests,
+		"notifications":           notifications,
+	})
 }
 
 // POST /notifications/:id/read?entity_id=

@@ -122,6 +122,7 @@ func NewRouter(s *Server) *gin.Engine {
 				// Friends
 				full.GET("/friends", s.HandleListFriends)
 				full.GET("/friends/requests", s.HandleListFriendRequests)
+				full.GET("/inbox/snapshot", s.HandleInboxSnapshot)
 				full.POST("/friends/requests", s.HandleCreateFriendRequest)
 				full.POST("/friends/requests/:id/accept", s.HandleAcceptFriendRequest)
 				full.POST("/friends/requests/:id/reject", s.HandleRejectFriendRequest)
