@@ -61,15 +61,6 @@ func validatePassword(password string) error {
 		return fmt.Errorf("password must contain uppercase, lowercase, and numbers")
 	}
 
-	// Check for common weak passwords
-	lowerPass := strings.ToLower(password)
-	weakPasswords := []string{"password", "12345678", "qwerty", "admin", "letmein", "welcome", "123456"}
-	for _, weak := range weakPasswords {
-		if strings.Contains(lowerPass, weak) {
-			return fmt.Errorf("password is too common or weak")
-		}
-	}
-
 	return nil
 }
 

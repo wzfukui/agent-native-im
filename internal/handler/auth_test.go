@@ -146,6 +146,16 @@ func TestRegisterReturnsPublicID(t *testing.T) {
 	}
 }
 
+func TestRegisterAcceptsComplexPasswordWithoutWeakWordFiltering(t *testing.T) {
+	truncateAll(t)
+
+	resp := doJSON(t, "POST", "/api/v1/auth/register", nil, map[string]string{
+		"username": "admin-token-user",
+		"password": "Admin@123456",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+}
+
 func TestCreateUserShortPassword(t *testing.T) {
 	truncateAll(t)
 	token := seedAdmin(t)
