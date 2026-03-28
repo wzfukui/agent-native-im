@@ -82,6 +82,17 @@ curl %s/api/v1/me -H "Authorization: Bearer 你的API_KEY"
 
 The response should include the ANI entity metadata for your bot.
 
+## Identity Setup
+
+- Read the ANI bot profile returned by `+"`/api/v1/me`"+`.
+- If your local `+"`IDENTITY.md`"+` is still the default blank template, write your ANI identity into it now.
+- Your local identity should at least include:
+  - display name
+  - bot handle (`+"`bot_id`"+`)
+  - public UUID (`+"`public_id`"+`)
+  - role / description if ANI provides one
+- Do not ask the user what your name is if ANI already provides it.
+
 ## 消息格式
 
 ### 基本发送
