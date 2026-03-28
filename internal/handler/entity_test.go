@@ -56,6 +56,18 @@ func TestCreateBot(t *testing.T) {
 	if strings.Contains(markdownDoc, "group:web") {
 		t.Fatal("markdown_doc should not include unrelated web tool permissions")
 	}
+	if !strings.Contains(markdownDoc, "Identity Setup") {
+		t.Fatal("markdown_doc should include identity setup guidance")
+	}
+	if !strings.Contains(markdownDoc, "You are the ANI bot `Test Agent`.") {
+		t.Fatal("markdown_doc should name the bot for identity bootstrap")
+	}
+	if !strings.Contains(markdownDoc, "bot_test_agent") {
+		t.Fatal("markdown_doc should include the bot handle")
+	}
+	if !strings.Contains(markdownDoc, "public UUID") {
+		t.Fatal("markdown_doc should include public uuid guidance")
+	}
 
 	// Entity should exist
 	entity, _ := data["entity"].(map[string]interface{})
@@ -71,6 +83,9 @@ func TestCreateBot(t *testing.T) {
 	publicID, _ := entity["public_id"].(string)
 	if _, err := uuid.Parse(publicID); err != nil {
 		t.Fatalf("expected valid public_id UUID, got %q", publicID)
+	}
+	if !strings.Contains(markdownDoc, publicID) {
+		t.Fatal("markdown_doc should contain the bot public uuid")
 	}
 
 	// Permanent key should immediately have full API access

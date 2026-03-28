@@ -164,6 +164,15 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 	keyLabel := "API Key"
 	keyNote := `- **此密钥为永久密钥（aim_ 前缀），可直接调用所有 API**
 - 请妥善保管，创建后不再展示`
+	roleHint := ""
+	if entity.Metadata != nil {
+		var meta map[string]interface{}
+		if err := json.Unmarshal(entity.Metadata, &meta); err == nil {
+			if desc, ok := meta["description"].(string); ok {
+				roleHint = strings.TrimSpace(desc)
+			}
+		}
+	}
 
 	markdownDoc := fmt.Sprintf(`# OpenClaw Access Pack — %s
 
@@ -207,6 +216,14 @@ openclaw gateway status
 
 If ANI does not appear online after applying the config, ask the user to reconnect or restart the OpenClaw gateway.
 
+## Identity Setup
+
+- You are the ANI bot `+"`%s`"+`.
+- Your bot handle is `+"`%s`"+`.
+- Your public UUID is `+"`%s`"+`.
+%s- If your local `+"`IDENTITY.md`"+` is still the default blank template, write this identity into it now.
+- Do not ask the user what your name is if ANI already provides it.
+
 ### Source Install (fallback)
 
 `+"```bash"+`
@@ -220,6 +237,15 @@ pnpm install
 		serverURL, wsURL, returnedKey,
 		serverURL, serverURL,
 		serverURL, returnedKey,
+		entity.DisplayName,
+		entity.BotID,
+		entity.PublicID,
+		func() string {
+			if roleHint == "" {
+				return ""
+			}
+			return fmt.Sprintf("- Your role: %s\n", roleHint)
+		}(),
 		serverURL,
 		returnedKey,
 	)
