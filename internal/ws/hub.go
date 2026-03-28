@@ -263,6 +263,23 @@ func (h *Hub) broadcastPresence(entityID int64, online bool) {
 			sent[client] = true
 		}
 	}
+
+	// Also push bot/service presence to the owning user even when they do not
+	// currently share an active subscribed conversation context with that entity.
+	entity, err := h.store.GetEntityByID(ctx, entityID)
+	if err == nil && entity.OwnerID != nil && *entity.OwnerID != entityID {
+		for client := range h.clients {
+			if client.entityID != *entity.OwnerID || sent[client] {
+				continue
+			}
+			select {
+			case client.send <- data:
+			default:
+				slog.Warn("ws: send buffer full", "entity_id", client.entityID, "context", "owner_presence")
+			}
+			sent[client] = true
+		}
+	}
 	h.mu.RUnlock()
 }
 

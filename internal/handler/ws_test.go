@@ -445,6 +445,55 @@ func TestHumanAlwaysReceivesGroupMessages(t *testing.T) {
 	}
 }
 
+func TestOwnerReceivesBotPresenceWithoutSharedConversation(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "presence-owned-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := int64(botEntity["id"].(float64))
+	botKey, _ := botData["api_key"].(string)
+	if botKey == "" {
+		t.Fatal("expected bot api_key")
+	}
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+
+	ownerConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + token}})
+	if err != nil {
+		t.Fatalf("owner ws dial: %v", err)
+	}
+	defer ownerConn.Close()
+	skipEntityConfig(t, ownerConn)
+
+	botConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + botKey}})
+	if err != nil {
+		t.Fatalf("bot ws dial: %v", err)
+	}
+	defer botConn.Close()
+
+	deadline := time.Now().Add(3 * time.Second)
+	ownerConn.SetReadDeadline(deadline)
+	for {
+		var msg map[string]interface{}
+		if err := ownerConn.ReadJSON(&msg); err != nil {
+			t.Fatalf("owner should receive bot presence update: %v", err)
+		}
+		if msg["type"] != "entity.online" {
+			continue
+		}
+		data, _ := msg["data"].(map[string]interface{})
+		if int64(data["entity_id"].(float64)) != botID {
+			continue
+		}
+		return
+	}
+}
+
 // skipEntityConfig drains initial WS messages (presence, config) until entity.config is found or timeout.
 func skipEntityConfig(t *testing.T, conn *gorillaWs.Conn) {
 	t.Helper()
