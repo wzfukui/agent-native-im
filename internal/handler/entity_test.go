@@ -47,8 +47,14 @@ func TestCreateBot(t *testing.T) {
 	if strings.Contains(markdownDoc, "agent-native-im-sdk-python") {
 		t.Fatal("markdown_doc should not direct OpenClaw users to the Python SDK")
 	}
-	if !strings.Contains(markdownDoc, "openclaw plugin install ani-openclaw-plugin") {
+	if !strings.Contains(markdownDoc, "openclaw plugins install ani-openclaw-plugin") {
 		t.Fatal("markdown_doc should contain the npm install path")
+	}
+	if strings.Contains(markdownDoc, "Entity ID") {
+		t.Fatal("markdown_doc should not include obsolete entity id guidance")
+	}
+	if strings.Contains(markdownDoc, "group:web") {
+		t.Fatal("markdown_doc should not include unrelated web tool permissions")
 	}
 
 	// Entity should exist

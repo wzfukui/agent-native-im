@@ -174,30 +174,20 @@ func (s *Server) HandleCreateEntity(c *gin.Context) {
 | API Base | `+"`%s/api/v1`"+` |
 | WebSocket | `+"`%s/api/v1/ws`"+` |
 | `+keyLabel+` | `+"`%s`"+` |
-| Entity ID | `+"`%d`"+` |
 
 ## Important
 
 `+keyNote+`
-- This access pack is intended for the ANI OpenClaw channel plugin.
-- Do not wire this token into the Python SDK quickstart. The recommended path is OpenClaw channel mode.
+- This access pack is intended for the ANI OpenClaw channel plugin only.
+- If OpenClaw is already running, update the ANI config first and then ask the user to reconnect or restart the gateway if ANI does not appear online.
 
 **OpenClaw onboarding guide:** %s/api/v1/onboarding-guide
 **LLM output format guide:** %s/api/v1/skill-template?format=text
 
-## Environment Variables
-
-`+"```bash"+`
-AGENT_IM_BASE=%s/api/v1
-AGENT_IM_TOKEN=%s
-AGENT_IM_WS=%s/api/v1/ws
-AGENT_IM_ENTITY_ID=%d
-`+"```"+`
-
 ## Quick Start (OpenClaw Plugin)
 
 `+"```bash"+`
-openclaw plugin install ani-openclaw-plugin
+openclaw plugins install ani-openclaw-plugin
 
 # Trust and enable the ANI plugin
 openclaw config set plugins.allow '["ani"]' --strict-json
@@ -211,12 +201,11 @@ openclaw config set channels.ani.apiKey "%s"
 openclaw config set tools.profile messaging
 openclaw config set tools.alsoAllow '["ani_send_file","ani_fetch_chat_history_messages","ani_list_conversation_tasks","ani_get_task","ani_create_task","ani_update_task","ani_delete_task"]' --strict-json
 
-# Optional: allow public web lookups
-openclaw config set tools.allow '["group:web"]' --strict-json
-
-# Start the gateway
-openclaw gateway run
+# Check whether the gateway is already running
+openclaw gateway status
 `+"```"+`
+
+If ANI does not appear online after applying the config, ask the user to reconnect or restart the OpenClaw gateway.
 
 ### Source Install (fallback)
 
@@ -228,9 +217,9 @@ pnpm install
 `+"```"+`
 `,
 		entity.DisplayName,
-		serverURL, wsURL, returnedKey, entity.ID,
+		serverURL, wsURL, returnedKey,
 		serverURL, serverURL,
-		serverURL, returnedKey, wsURL, entity.ID,
+		serverURL, returnedKey,
 		serverURL,
 		returnedKey,
 	)

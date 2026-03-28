@@ -41,7 +41,7 @@ func (s *Server) HandleOnboardingGuide(c *gin.Context) {
 
 Create a Bot in ANI Web → get a permanent API key (`+"`aim_`"+` prefix) → connect it through the ANI OpenClaw channel plugin.
 
-If you are using OpenClaw, **do not start by wiring a custom Python echo bot**. The supported default path is the OpenClaw channel plugin.
+If you are using OpenClaw, the supported default path is the ANI channel plugin.
 
 ## Required Values
 
@@ -54,7 +54,7 @@ If you are using OpenClaw, **do not start by wiring a custom Python echo bot**. 
 ## Quick Start (OpenClaw)
 
 `+"```bash"+`
-openclaw plugin install ani-openclaw-plugin
+openclaw plugins install ani-openclaw-plugin
 
 # Trust and enable the ANI plugin
 openclaw config set plugins.allow '["ani"]' --strict-json
@@ -68,21 +68,11 @@ openclaw config set channels.ani.apiKey "你的API_KEY"
 openclaw config set tools.profile messaging
 openclaw config set tools.alsoAllow '["ani_send_file","ani_fetch_chat_history_messages","ani_list_conversation_tasks","ani_get_task","ani_create_task","ani_update_task","ani_delete_task"]' --strict-json
 
-# Optional: enable public web search/fetch
-openclaw config set tools.allow '["group:web"]' --strict-json
-
-# Start the gateway
-openclaw gateway run
+# Check whether the gateway is already running
+openclaw gateway status
 `+"```"+`
 
-## Source Install (fallback)
-
-`+"```bash"+`
-git clone https://github.com/wzfukui/openclaw.git
-cd openclaw
-git checkout main
-pnpm install
-`+"```"+`
+If ANI does not appear online after applying the config, ask the user to reconnect or restart the OpenClaw gateway.
 
 ## Verify The Connection
 
