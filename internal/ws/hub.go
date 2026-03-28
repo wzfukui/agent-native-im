@@ -479,6 +479,20 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 		mentionSet[eid] = true
 	}
 
+	handoverAssignees := map[int64]bool{}
+	if msg.ContentType == model.ContentTaskHandover && len(msg.Layers.Data) > 0 {
+		var handoverData struct {
+			AssignTo []int64 `json:"assign_to"`
+		}
+		if err := json.Unmarshal(msg.Layers.Data, &handoverData); err != nil {
+			slog.Warn("ws: failed to parse task_handover data", "message_id", msg.ID, "error", err)
+		} else {
+			for _, eid := range handoverData.AssignTo {
+				handoverAssignees[eid] = true
+			}
+		}
+	}
+
 	// Load participant subscription modes, entity types, and context windows
 	ctx := context.Background()
 	conv, err := h.store.GetConversation(ctx, msg.ConversationID)
@@ -531,6 +545,11 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 			continue
 		}
 
+		// System messages are UI/status events, not conversational inputs for bots.
+		if msg.ContentType == model.ContentSystem {
+			continue
+		}
+
 		// Bots/services: only direct conversations auto-deliver;
 		// groups/channels always respect subscription mode, even with 2 members.
 		isDirectConversation := conv != nil && conv.ConvType == model.ConvDirect
@@ -540,7 +559,9 @@ func (h *Hub) BroadcastMessage(msg *model.Message) {
 		}
 
 		shouldDeliver := false
-		if isDirectConversation {
+		if msg.ContentType == model.ContentTaskHandover && len(handoverAssignees) > 0 {
+			shouldDeliver = handoverAssignees[client.entityID]
+		} else if isDirectConversation {
 			// Direct message: always deliver to the bot
 			shouldDeliver = true
 		} else {

@@ -494,6 +494,65 @@ func TestOwnerReceivesBotPresenceWithoutSharedConversation(t *testing.T) {
 	}
 }
 
+func TestBotDoesNotReceiveSystemTaskMessageAsChatInput(t *testing.T) {
+	truncateAll(t)
+	token := seedAdmin(t)
+
+	resp := doJSON(t, "POST", "/api/v1/entities", ptr(token), map[string]string{"name": "task-system-bot"})
+	assertStatus(t, resp, http.StatusCreated)
+	botData := parseOK(t, resp)
+	botEntity, _ := botData["entity"].(map[string]interface{})
+	botID := botEntity["id"].(float64)
+	botKey, _ := botData["api_key"].(string)
+	if botKey == "" {
+		t.Fatal("expected bot api_key")
+	}
+
+	resp = doJSON(t, "POST", "/api/v1/conversations", ptr(token), map[string]interface{}{
+		"title":           "Task System Test",
+		"conv_type":       "group",
+		"participant_ids": []float64{botID},
+	})
+	assertStatus(t, resp, http.StatusCreated)
+	convData := parseOK(t, resp)
+	convID := int(convData["id"].(float64))
+
+	resp = doJSON(t, "PUT", fmt.Sprintf("/api/v1/conversations/%d/subscription", convID), ptr(botKey), map[string]string{
+		"mode": "subscribe_all",
+	})
+	assertStatus(t, resp, http.StatusOK)
+
+	ts := newWSTestServer(t)
+	defer ts.Close()
+	wsURL := fmt.Sprintf("ws%s/api/v1/ws", ts.URL[len("http"):])
+
+	botConn, _, err := gorillaWs.DefaultDialer.Dial(wsURL, http.Header{"Authorization": []string{"Bearer " + botKey}})
+	if err != nil {
+		t.Fatalf("bot ws dial: %v", err)
+	}
+	defer botConn.Close()
+	skipEntityConfig(t, botConn)
+
+	resp = doJSON(t, "POST", fmt.Sprintf("/api/v1/conversations/%d/tasks", convID), ptr(token), map[string]interface{}{
+		"title": "Install GitHub CLI",
+	})
+	assertStatus(t, resp, http.StatusCreated)
+
+	msgs := readWSMessages(t, botConn, 4, 1500*time.Millisecond)
+	foundTaskUpdated := false
+	for _, msg := range msgs {
+		switch msg["type"] {
+		case "task.updated":
+			foundTaskUpdated = true
+		case "message.new":
+			t.Fatalf("bot should not receive task system messages as chat input: %+v", msg)
+		}
+	}
+	if !foundTaskUpdated {
+		t.Fatal("expected bot to still receive task.updated event")
+	}
+}
+
 // skipEntityConfig drains initial WS messages (presence, config) until entity.config is found or timeout.
 func skipEntityConfig(t *testing.T, conn *gorillaWs.Conn) {
 	t.Helper()
