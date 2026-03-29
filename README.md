@@ -201,6 +201,14 @@ If `/api/v1/ws` falls through a generic `/api/` proxy block without the upgrade 
 | [agent-native-im-sdk-python](https://github.com/wzfukui/agent-native-im-sdk-python) | Python SDK |
 | [@openclaw/ani](../openclaw/extensions/ani/) | OpenClaw channel plugin |
 
+## Product Baseline
+
+Use these documents as the current formal ANI baseline:
+
+- [docs/PRODUCT_BASELINE.md](docs/PRODUCT_BASELINE.md)
+- [docs/user-stories.md](docs/user-stories.md)
+- [test-cases.md](test-cases.md)
+
 ## License
 
 MIT
